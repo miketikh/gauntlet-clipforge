@@ -375,13 +375,13 @@ Implement the project state management system that tracks timeline composition w
 **Goal:** Create data model for timeline composition and project state management
 
 **Tasks:**
-- [ ] Read `src/types/media.ts` to understand MediaFile interface
-- [ ] Create NEW: `src/types/timeline.ts` - Timeline type definitions:
+- [x] Read `src/types/media.ts` to understand MediaFile interface
+- [x] Create NEW: `src/types/timeline.ts` - Timeline type definitions:
   - `interface TimelineClip` - id, mediaFileId, trackIndex, startTime, endTime, trimStart, trimEnd
   - `interface Track` - id, name, clips: TimelineClip[]
   - `interface Project` - id, name, tracks: Track[], duration
   - Export all interfaces
-- [ ] Create NEW: `src/renderer/store/projectStore.ts` - Zustand store for project:
+- [x] Create NEW: `src/renderer/store/projectStore.ts` - Zustand store for project:
   - State: `currentProject: Project | null`, `playheadPosition: number`
   - Actions:
     - `createProject(name)` - Initialize new project with 2 empty tracks
@@ -391,12 +391,12 @@ Implement the project state management system that tracks timeline composition w
     - `setPlayheadPosition(position)` - Update playhead
     - `getProjectDuration()` - Calculate total timeline duration
   - Persist project to localStorage
-- [ ] Create NEW: `src/renderer/utils/timelineCalculations.ts` - Helper functions:
+- [x] Create NEW: `src/renderer/utils/timelineCalculations.ts` - Helper functions:
   - `calculateClipDuration(clip)` - Returns clip duration accounting for trim
   - `calculateTrackDuration(track)` - Returns track end time
   - `findClipAtPosition(track, position)` - Returns clip at playhead position
   - `detectOverlaps(track)` - Checks if clips overlap (validation)
-- [ ] Document the non-destructive editing model in code comments:
+- [x] Document the non-destructive editing model in code comments:
   - Original media files never modified
   - Timeline clips reference media via mediaFileId
   - Trim points stored as offsets (trimStart/trimEnd in seconds)
@@ -429,8 +429,8 @@ Implement the project state management system that tracks timeline composition w
 **Goal:** Create internal API exposing all edit operations for both UI and future AI agent use
 
 **Tasks:**
-- [ ] Read `src/renderer/store/projectStore.ts` to understand project actions
-- [ ] Create NEW: `src/renderer/api/EditAPI.ts` - Programmatic edit interface:
+- [x] Read `src/renderer/store/projectStore.ts` to understand project actions
+- [x] Create NEW: `src/renderer/api/EditAPI.ts` - Programmatic edit interface:
   - `class EditAPI` with methods:
     - `async addClip(mediaFileId, trackIndex, startTime)` - Add clip to timeline
     - `async trimClip(clipId, trimStart?, trimEnd?)` - Adjust clip trim points
@@ -443,17 +443,17 @@ Implement the project state management system that tracks timeline composition w
   - Each method validates input and updates projectStore
   - Each method returns Promise (for async compatibility later)
   - Log all operations to console for debugging
-- [ ] Implement Command pattern structure:
+- [x] Implement Command pattern structure:
   - Each method creates a command object: `{ type, payload, timestamp }`
   - Store command history in projectStore (for potential undo later)
   - Max 50 commands in history to avoid memory issues
-- [ ] Add validation logic:
+- [x] Add validation logic:
   - Verify mediaFileId exists before adding clip
   - Verify clipId exists before trim/delete/move
   - Verify trackIndex is valid (0 or 1 for MVP)
   - Prevent overlapping clips on same track (snap to available space)
-- [ ] Create NEW: `src/renderer/api/index.ts` - Export singleton EditAPI instance
-- [ ] Document API with JSDoc comments and usage examples
+- [x] Create NEW: `src/renderer/api/index.ts` - Export singleton EditAPI instance
+- [x] Document API with JSDoc comments and usage examples
 
 **What to Test:**
 1. Call `EditAPI.addClip()` with valid media - verify clip appears in projectStore
@@ -489,36 +489,36 @@ Build the interactive timeline with drag-and-drop clip arrangement, trim handles
 **Goal:** Render timeline tracks with time ruler and playhead indicator
 
 **Tasks:**
-- [ ] Read `src/renderer/components/Timeline.tsx` to see current placeholder
-- [ ] Read `src/renderer/store/projectStore.ts` to understand project state
-- [ ] Update `src/renderer/components/Timeline.tsx`:
+- [x] Read `src/renderer/components/Timeline.tsx` to see current placeholder
+- [x] Read `src/renderer/store/projectStore.ts` to understand project state
+- [x] Update `src/renderer/components/Timeline.tsx`:
   - Subscribe to projectStore (get current project and tracks)
   - Implement zoom state: `pixelsPerSecond` (start at 50px/sec)
   - Calculate timeline width: `projectDuration * pixelsPerSecond`
   - Render scrollable container for timeline content
-- [ ] Create NEW: `src/renderer/components/TimelineRuler.tsx` - Time ruler:
+- [x] Create NEW: `src/renderer/components/TimelineRuler.tsx` - Time ruler:
   - Shows time markers every 5 seconds (00:00, 00:05, 00:10, etc.)
   - Tick marks at 1-second intervals
   - Width based on timeline zoom level
   - Fixed at top of timeline
-- [ ] Create NEW: `src/renderer/components/TimelineTrack.tsx` - Single track row:
+- [x] Create NEW: `src/renderer/components/TimelineTrack.tsx` - Single track row:
   - Props: `track: Track`, `zoom: number`
   - Height 80px per track
   - Background grid lines at 5-second intervals
   - Track label on left ("Track 1", "Track 2")
   - Container for clips (will add in next PR)
-- [ ] Create NEW: `src/renderer/components/Playhead.tsx` - Playhead indicator:
+- [x] Create NEW: `src/renderer/components/Playhead.tsx` - Playhead indicator:
   - Red vertical line spanning all tracks
   - Position based on playheadPosition from projectStore
   - Position calculation: `playheadPosition * pixelsPerSecond`
   - Triangular handle at top for dragging (next PR)
   - Should overlay clips (z-index)
-- [ ] Add zoom controls in Timeline header:
+- [x] Add zoom controls in Timeline header:
   - Zoom in button (increase pixelsPerSecond by 10)
   - Zoom out button (decrease pixelsPerSecond by 10)
   - Min zoom: 20px/sec, Max zoom: 100px/sec
   - Display current zoom level (e.g., "50px/s")
-- [ ] Add CSS for timeline styling:
+- [x] Add CSS for timeline styling:
   - Horizontal scrollbar when content wider than viewport
   - Track backgrounds alternate colors for visual distinction
   - Ruler text labels positioned correctly
@@ -550,21 +550,21 @@ Build the interactive timeline with drag-and-drop clip arrangement, trim handles
 **Goal:** Enable dragging media from library onto timeline tracks
 
 **Tasks:**
-- [ ] Read `src/renderer/components/MediaItem.tsx` to see media list items
-- [ ] Read `src/renderer/api/EditAPI.ts` to understand addClip method
-- [ ] Install drag-and-drop library: `npm install react-dnd react-dnd-html5-backend`
-- [ ] Update `src/renderer/components/MediaItem.tsx`:
+- [x] Read `src/renderer/components/MediaItem.tsx` to see media list items
+- [x] Read `src/renderer/api/EditAPI.ts` to understand addClip method
+- [x] Install drag-and-drop library: `npm install react-dnd react-dnd-html5-backend`
+- [x] Update `src/renderer/components/MediaItem.tsx`:
   - Wrap component in `useDrag` hook from react-dnd
   - Drag type: `"MEDIA_ITEM"`
   - Drag data: `{ mediaFileId, mediaFile }`
   - Add CSS cursor pointer on hover
-- [ ] Update `src/renderer/components/TimelineTrack.tsx`:
+- [x] Update `src/renderer/components/TimelineTrack.tsx`:
   - Wrap track in `useDrop` hook
   - Accept type: `"MEDIA_ITEM"`
   - On drop: Calculate drop position in seconds from pixel X coordinate
   - Call `EditAPI.addClip(mediaFileId, trackIndex, dropPosition)`
   - Show drop preview indicator when dragging over track
-- [ ] Create NEW: `src/renderer/components/TimelineClipView.tsx` - Visual clip on timeline:
+- [x] Create NEW: `src/renderer/components/TimelineClipView.tsx` - Visual clip on timeline:
   - Props: `clip: TimelineClip`, `zoom: number`
   - Render as rectangular block:
     - Position: `clip.startTime * zoom` (left offset)
@@ -573,10 +573,10 @@ Build the interactive timeline with drag-and-drop clip arrangement, trim handles
   - Display clip label (media filename, truncated if too long)
   - Background color to distinguish from track
   - Show waveform thumbnail (optional, can skip for MVP)
-- [ ] Update `src/renderer/components/TimelineTrack.tsx`:
+- [x] Update `src/renderer/components/TimelineTrack.tsx`:
   - Map over track.clips and render TimelineClipView for each
   - Position clips using absolute positioning
-- [ ] Prevent overlapping clips:
+- [x] Prevent overlapping clips:
   - In EditAPI.addClip, check for existing clips at drop position
   - If overlap detected, snap to end of last clip
   - Alert user if auto-snapping occurred
@@ -664,13 +664,13 @@ Build the interactive timeline with drag-and-drop clip arrangement, trim handles
 
 ---
 
-### PR 1.4.4: Split Clip at Playhead & Delete Clip
+### PR 1.4.4: Split Clip at Playhead & Delete Clip [x]
 
 **Goal:** Implement split and delete operations for timeline clips
 
 **Tasks:**
-- [ ] Read `src/renderer/components/TimelineClipView.tsx` to see current clip rendering
-- [ ] Update `src/renderer/components/TimelineClipView.tsx`:
+- [x] Read `src/renderer/components/TimelineClipView.tsx` to see current clip rendering
+- [x] Update `src/renderer/components/TimelineClipView.tsx`:
   - Add click handler to select clip (highlight with border)
   - Store selected clip ID in projectStore: `selectedClipId: string | null`
   - Add keyboard event listener:
@@ -680,7 +680,7 @@ Build the interactive timeline with drag-and-drop clip arrangement, trim handles
     - "Split at Playhead" option
     - "Delete Clip" option
     - Show only when playhead is over the clip
-- [ ] Update `src/renderer/api/EditAPI.ts` `splitClip` method:
+- [x] Update `src/renderer/api/EditAPI.ts` `splitClip` method:
   - Validate playhead is within clip bounds
   - Calculate split point relative to clip start
   - Create two new clips:
@@ -689,15 +689,15 @@ Build the interactive timeline with drag-and-drop clip arrangement, trim handles
   - Remove original clip
   - Add two new clips to same track
   - Return new clip IDs
-- [ ] Update `src/renderer/api/EditAPI.ts` `deleteClip` method:
+- [x] Update `src/renderer/api/EditAPI.ts` `deleteClip` method:
   - Remove clip from track in projectStore
   - If other clips exist after deleted clip, optionally shift them left (auto-close gap)
   - Update selectedClipId to null
-- [ ] Add UI feedback:
+- [x] Add UI feedback:
   - Selected clip has yellow/blue border
   - Show keyboard shortcut hints in header (Delete = delete, Cmd+K = split)
   - Flash animation when clip is split (brief highlight on new clips)
-- [ ] Update `src/renderer/components/Timeline.tsx`:
+- [x] Update `src/renderer/components/Timeline.tsx`:
   - Listen for keyboard events when timeline has focus
   - Focus timeline container when user clicks on it
 

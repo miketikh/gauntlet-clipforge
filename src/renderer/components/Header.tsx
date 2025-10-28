@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
 import { selectFile, importVideo, generateThumbnail } from '../utils/ipc';
 import { useMediaStore } from '../store/mediaStore';
+import { useProjectStore } from '../store/projectStore';
 
 const Header: React.FC = () => {
   const [isImporting, setIsImporting] = useState(false);
   const addMediaFile = useMediaStore((state) => state.addMediaFile);
+  const createProject = useProjectStore((state) => state.createProject);
+  const currentProject = useProjectStore((state) => state.currentProject);
 
   const handleImport = async () => {
     try {
@@ -70,6 +73,22 @@ const Header: React.FC = () => {
         ClipForge
       </h1>
       <div style={{ display: 'flex', gap: '10px' }}>
+        {!currentProject && (
+          <button
+            onClick={() => createProject('My Video Project')}
+            style={{
+              padding: '8px 16px',
+              background: '#9b59b6',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontSize: '0.9rem',
+            }}
+          >
+            New Project
+          </button>
+        )}
         <button
           onClick={handleImport}
           disabled={isImporting}

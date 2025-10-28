@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useDrag } from 'react-dnd';
 import { MediaFile } from '../../types/media';
 import { useMediaStore } from '../store/mediaStore';
 
@@ -18,6 +19,15 @@ const MediaItem: React.FC<MediaItemProps> = ({ mediaFile, onClick }) => {
   const [isHovered, setIsHovered] = useState(false);
   const removeMediaFile = useMediaStore((state) => state.removeMediaFile);
 
+  // Setup drag source
+  const [{ isDragging }, drag] = useDrag(() => ({
+    type: 'MEDIA_ITEM',
+    item: { mediaFileId: mediaFile.id, mediaFile },
+    collect: (monitor) => ({
+      isDragging: monitor.isDragging(),
+    }),
+  }));
+
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent triggering parent click handlers
     if (confirm(`Delete "${mediaFile.filename}" from library?`)) {
@@ -27,6 +37,7 @@ const MediaItem: React.FC<MediaItemProps> = ({ mediaFile, onClick }) => {
 
   return (
     <div
+      ref={drag}
       onClick={onClick}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
@@ -35,10 +46,11 @@ const MediaItem: React.FC<MediaItemProps> = ({ mediaFile, onClick }) => {
         gap: '12px',
         padding: '10px',
         background: isHovered ? '#34495e' : 'transparent',
-        cursor: 'pointer',
+        cursor: isDragging ? 'grabbing' : 'pointer',
         borderRadius: '4px',
         transition: 'background 0.2s ease',
         position: 'relative',
+        opacity: isDragging ? 0.5 : 1,
       }}
     >
       {/* Thumbnail */}
