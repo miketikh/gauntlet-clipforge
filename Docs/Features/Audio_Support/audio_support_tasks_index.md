@@ -39,9 +39,29 @@ This document has been split into 5 manageable parts for easier navigation and A
 - **Group D: ProjectStore Actions**
   - Task D1: Add transcript management actions
   - Task D2: Add cut range management actions
-  - Task D3: Add audio control actions
+  - Task D3: Add audio control actions ✅
 
-**>> Last progress:** Completed C1-C3. Audio import working, track types display correctly (🎬 Video, 🎵 Audio). Fixed getAudioMetadata() for proper audio file handling. createProject() now creates VIDEO + AUDIO tracks. Next: C4 (mute/volume), then D1-D3 in parallel.
+**>> PLAN UPDATE:** Reordered tasks for faster testing of basic audio playback functionality. Instead of following original order (C→D→E→F→G→H), we're prioritizing audio playback:
+1. **G1 + D3 in parallel** (AudioMixer service + audio control actions) ← NEXT
+2. **G2** after G1 completes (integrate AudioMixer into TimelinePlayer)
+3. **After audio playback works**, return to: D1-D2 (transcripts/cut ranges), E (waveforms), F (multi-track UI), H (advanced controls)
+4. **Rationale**: Get basic video+audio playback working first before visualization features. Saves testing time.
+
+**>> Last progress:**
+- ✅ Completed C1-C4 (timeline UI, audio import, playback handling, mute/volume)
+- ✅ Audio import working, track types display correctly (🎬 Video, 🎵 Audio)
+- ✅ Fixed getAudioMetadata() for proper audio file handling
+- ✅ createProject() now creates VIDEO + AUDIO tracks
+- ✅ Basic mute/volume settings applied to video clips (clip × track × global)
+- ✅ G1: AudioMixer service created (Web Audio API integration)
+- ✅ G2: AudioMixer integrated with TimelinePlayer (fade in/out support)
+
+**Bug fixes completed:**
+- ✅ Timeline ruler extends 60s beyond last clip (visual vs actual duration)
+- ✅ Playback continues through gaps with black screen (industry standard behavior)
+- ✅ Reset Project button added to header for testing
+
+**Next: D1-D2 (transcripts/cut ranges), E (waveforms), F (multi-track UI), or H (advanced controls)**
 
 ---
 

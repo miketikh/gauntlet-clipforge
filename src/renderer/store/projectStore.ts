@@ -42,6 +42,13 @@ interface ProjectState {
   getProjectDuration: () => number;
   addCommand: (command: EditCommand) => void;
   setSelectedClipId: (clipId: string | null) => void;
+
+  // Audio control actions
+  setClipVolume: (clipId: string, volume: number) => void;
+  setClipMuted: (clipId: string, muted: boolean) => void;
+  setClipFades: (clipId: string, fadeIn: number, fadeOut: number) => void;
+  setTrackVolume: (trackId: string, volume: number) => void;
+  setTrackMuted: (trackId: string, muted: boolean) => void;
 }
 
 export const useProjectStore = create<ProjectState>()(
@@ -253,6 +260,75 @@ export const useProjectStore = create<ProjectState>()(
        */
       setSelectedClipId: (clipId: string | null) => {
         set({ selectedClipId: clipId });
+      },
+
+      /**
+       * Set clip volume (0-1 range, clamped)
+       */
+      setClipVolume: (clipId: string, volume: number) => {
+        const clampedVolume = Math.max(0, Math.min(1, volume));
+        get().updateClip(clipId, { volume: clampedVolume });
+        console.log('[ProjectStore] Set clip volume:', clipId, clampedVolume);
+      },
+
+      /**
+       * Set clip muted state
+       */
+      setClipMuted: (clipId: string, muted: boolean) => {
+        get().updateClip(clipId, { muted });
+        console.log('[ProjectStore] Set clip muted:', clipId, muted);
+      },
+
+      /**
+       * Set clip fade in/out durations (non-negative values)
+       */
+      setClipFades: (clipId: string, fadeIn: number, fadeOut: number) => {
+        get().updateClip(clipId, {
+          fadeIn: Math.max(0, fadeIn),
+          fadeOut: Math.max(0, fadeOut)
+        });
+        console.log('[ProjectStore] Set clip fades:', clipId, { fadeIn, fadeOut });
+      },
+
+      /**
+       * Set track volume (0-1 range, clamped)
+       */
+      setTrackVolume: (trackId: string, volume: number) => {
+        const state = get();
+        if (!state.currentProject) return;
+
+        const clampedVolume = Math.max(0, Math.min(1, volume));
+        const updatedTracks = state.currentProject.tracks.map(track =>
+          track.id === trackId ? { ...track, volume: clampedVolume } : track
+        );
+
+        set({
+          currentProject: {
+            ...state.currentProject,
+            tracks: updatedTracks
+          }
+        });
+        console.log('[ProjectStore] Set track volume:', trackId, clampedVolume);
+      },
+
+      /**
+       * Set track muted state
+       */
+      setTrackMuted: (trackId: string, muted: boolean) => {
+        const state = get();
+        if (!state.currentProject) return;
+
+        const updatedTracks = state.currentProject.tracks.map(track =>
+          track.id === trackId ? { ...track, muted } : track
+        );
+
+        set({
+          currentProject: {
+            ...state.currentProject,
+            tracks: updatedTracks
+          }
+        });
+        console.log('[ProjectStore] Set track muted:', trackId, muted);
       },
     }),
     {

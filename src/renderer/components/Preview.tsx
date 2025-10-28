@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useCallback } from 'react';
 import { usePlayerStore } from '../store/playerStore';
 import { useProjectStore } from '../store/projectStore';
-import { useMediaStore } from '../store/mediaStore';
 import { TimelinePlayer } from '../services/TimelinePlayer';
 
 /**
@@ -22,10 +21,10 @@ const Preview: React.FC = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const timelinePlayerRef = useRef<TimelinePlayer | null>(null);
   const isUserSeekingRef = useRef<boolean>(false); // Track if user is manually seeking
+  const wasPlayingRef = useRef<boolean>(false); // Track previous play state to detect changes
 
-  const { isPlaying, currentTime, volume, playbackRate, play, pause, setCurrentTime } = usePlayerStore();
+  const { isPlaying, volume, playbackRate, play, pause } = usePlayerStore();
   const { currentProject, playheadPosition, setPlayheadPosition } = useProjectStore();
-  const { mediaFiles } = useMediaStore();
 
   // Initialize TimelinePlayer when project changes
   useEffect(() => {
@@ -62,7 +61,7 @@ const Preview: React.FC = () => {
     timelinePlayerRef.current = player;
 
     // Update player with current settings
-    player.setVolume(volume);
+    player.setGlobalVolume(volume);
     player.setPlaybackRate(playbackRate);
 
     // Seek to current playhead position
@@ -74,7 +73,7 @@ const Preview: React.FC = () => {
         timelinePlayerRef.current = null;
       }
     };
-  }, [currentProject]);
+  }, [!!currentProject]); // Only recreate when project existence changes (null ↔ project), not when clips change
 
   // Update timeline player when project data changes
   useEffect(() => {
@@ -84,25 +83,37 @@ const Preview: React.FC = () => {
   }, [currentProject?.tracks, currentProject?.duration]);
 
   // Handle play/pause changes
+  // Only trigger when isPlaying state changes (not on clip changes)
+  // wasPlayingRef prevents infinite loops from RAF updates triggering state changes
   useEffect(() => {
-    if (!timelinePlayerRef.current) return;
+    if (!timelinePlayerRef.current || isUserSeekingRef.current) return;
 
-    if (isPlaying) {
-      timelinePlayerRef.current.play(playheadPosition);
-    } else {
-      timelinePlayerRef.current.pause();
+    // Only act when play state actually changes
+    if (isPlaying !== wasPlayingRef.current) {
+      if (isPlaying) {
+        timelinePlayerRef.current.play(playheadPosition);
+      } else {
+        timelinePlayerRef.current.pause();
+      }
+      wasPlayingRef.current = isPlaying;
     }
-  }, [isPlaying]);
+  }, [isPlaying, playheadPosition]);
 
   // Handle playhead scrubbing (when user manually moves playhead)
   const previousPlayheadRef = useRef<number>(playheadPosition);
 
   useEffect(() => {
+    // Only seek when paused - don't react to RAF updates during playback
+    if (isPlaying) {
+      previousPlayheadRef.current = playheadPosition;
+      return;
+    }
+
     // Seek if playhead position changed (enable responsive scrubbing during drag)
     const positionDelta = Math.abs(playheadPosition - previousPlayheadRef.current);
 
     if (positionDelta > 0.03) { // ~1 frame at 30fps for smooth scrubbing
-      if (timelinePlayerRef.current && !isPlaying && !isUserSeekingRef.current) {
+      if (timelinePlayerRef.current && !isUserSeekingRef.current) {
         isUserSeekingRef.current = true;
         timelinePlayerRef.current.seek(playheadPosition).then(() => {
           isUserSeekingRef.current = false;
@@ -115,7 +126,7 @@ const Preview: React.FC = () => {
   // Update volume
   useEffect(() => {
     if (timelinePlayerRef.current) {
-      timelinePlayerRef.current.setVolume(volume);
+      timelinePlayerRef.current.setGlobalVolume(volume);
     }
     if (videoRef.current) {
       videoRef.current.volume = volume;
@@ -131,26 +142,6 @@ const Preview: React.FC = () => {
       videoRef.current.playbackRate = playbackRate;
     }
   }, [playbackRate]);
-
-  // Update current time display from video element
-  useEffect(() => {
-    if (!videoRef.current) return;
-
-    const video = videoRef.current;
-
-    const updateTime = () => {
-      if (video) {
-        const videoTime = video.currentTime;
-        setCurrentTime(videoTime);
-      }
-    };
-
-    video.addEventListener('timeupdate', updateTime);
-
-    return () => {
-      video.removeEventListener('timeupdate', updateTime);
-    };
-  }, [setCurrentTime]);
 
   // Handle keyboard shortcuts
   const handleKeyDown = useCallback(
