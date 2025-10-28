@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useDrag } from 'react-dnd';
-import { MediaFile } from '../../types/media';
+import { MediaFile, MediaType } from '../../types/media';
 import { useMediaStore } from '../store/mediaStore';
 
 interface MediaItemProps {
@@ -53,7 +53,7 @@ const MediaItem: React.FC<MediaItemProps> = ({ mediaFile, onClick }) => {
         opacity: isDragging ? 0.5 : 1,
       }}
     >
-      {/* Thumbnail */}
+      {/* Thumbnail or Audio Icon */}
       <div
         style={{
           width: '80px',
@@ -62,17 +62,32 @@ const MediaItem: React.FC<MediaItemProps> = ({ mediaFile, onClick }) => {
           background: '#1a1a1a',
           borderRadius: '4px',
           overflow: 'hidden',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
         }}
       >
-        <img
-          src={mediaFile.thumbnail}
-          alt={mediaFile.filename}
-          style={{
-            width: '100%',
-            height: '100%',
-            objectFit: 'cover',
-          }}
-        />
+        {mediaFile.type === MediaType.AUDIO ? (
+          // Show audio icon for audio files
+          <div
+            style={{
+              fontSize: '2rem',
+            }}
+          >
+            🎵
+          </div>
+        ) : (
+          // Show video thumbnail
+          <img
+            src={mediaFile.thumbnail}
+            alt={mediaFile.filename}
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+            }}
+          />
+        )}
       </div>
 
       {/* Metadata */}
@@ -100,7 +115,7 @@ const MediaItem: React.FC<MediaItemProps> = ({ mediaFile, onClick }) => {
           {mediaFile.filename}
         </div>
 
-        {/* Duration and Resolution */}
+        {/* Duration and Resolution/Type */}
         <div
           style={{
             display: 'flex',
@@ -110,9 +125,13 @@ const MediaItem: React.FC<MediaItemProps> = ({ mediaFile, onClick }) => {
           }}
         >
           <span>{formatDuration(mediaFile.duration)}</span>
-          <span>
-            {mediaFile.resolution.width}x{mediaFile.resolution.height}
-          </span>
+          {mediaFile.type === MediaType.AUDIO ? (
+            <span>Audio</span>
+          ) : mediaFile.resolution ? (
+            <span>
+              {mediaFile.resolution.width}x{mediaFile.resolution.height}
+            </span>
+          ) : null}
         </div>
       </div>
 

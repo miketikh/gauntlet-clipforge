@@ -8,10 +8,10 @@
  * - Separation of concerns: playback logic vs UI updates
  */
 
-import { Project, TimelineClip } from '../../types/timeline';
+import { Project, TimelineClip, TrackType } from '../../types/timeline';
 import { findClipAtPosition, calculateClipDuration } from '../utils/timelineCalculations';
 import { useMediaStore } from '../store/mediaStore';
-import { MediaFile } from '../../types/media';
+import { MediaFile, MediaType } from '../../types/media';
 
 /**
  * Playback state machine
@@ -112,12 +112,16 @@ export class TimelinePlayer {
 
     this.isPlaying = true;
 
-    const clip = this.getClipAtPosition(this.currentPlayheadPosition);
+    const { videoClip, audioClips } = this.getClipsAtPosition(this.currentPlayheadPosition);
 
-    if (clip) {
+    if (audioClips.length > 0) {
+      console.log('[TimelinePlayer] Detected', audioClips.length, 'audio clips at position (playback not yet implemented)');
+    }
+
+    if (videoClip) {
       // Start playing from the current clip
       this.playbackState = PlaybackState.LOADING;
-      await this.loadAndPlayClip(clip);
+      await this.loadAndPlayClip(videoClip);
       this.playbackState = PlaybackState.PLAYING;
 
       // CRITICAL FIX: Wait for video to actually start playing before starting RAF loop
@@ -222,6 +226,44 @@ export class TimelinePlayer {
   }
 
   /**
+   * Check if a media file is audio-only
+   */
+  private isAudioOnly(mediaFile: MediaFile): boolean {
+    return mediaFile.type === MediaType.AUDIO;
+  }
+
+  /**
+   * Get all clips at a specific playhead position
+   */
+  private getClipsAtPosition(position: number): {
+    videoClip: TimelineClip | null;
+    audioClips: TimelineClip[];
+  } {
+    const result = {
+      videoClip: null as TimelineClip | null,
+      audioClips: [] as TimelineClip[]
+    };
+
+    if (!this.project.tracks || this.project.tracks.length === 0) {
+      return result;
+    }
+
+    this.project.tracks.forEach(track => {
+      const clip = findClipAtPosition(track, position);
+      if (!clip) return;
+
+      const trackType = track.type || TrackType.VIDEO;
+      if (trackType === TrackType.VIDEO) {
+        result.videoClip = clip;
+      } else if (trackType === TrackType.AUDIO) {
+        result.audioClips.push(clip);
+      }
+    });
+
+    return result;
+  }
+
+  /**
    * Get the clip at a specific playhead position (only Track 0 for MVP)
    */
   private getClipAtPosition(position: number): TimelineClip | null {
@@ -280,6 +322,12 @@ export class TimelinePlayer {
     }
 
     this.currentMedia = media;
+
+    // Check if audio-only
+    if (this.isAudioOnly(media)) {
+      console.log('[TimelinePlayer] Audio-only clip detected, playback not yet implemented');
+      return; // Skip video element loading
+    }
 
     // Load video
     const videoPath = media.path;

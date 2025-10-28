@@ -158,4 +158,48 @@ export class VideoProcessor {
       });
     });
   }
+
+  /**
+   * Get metadata information from an audio file
+   * @param audioPath - Path to audio file
+   * @returns Promise that resolves with audio metadata (duration, codec info)
+   */
+  async getAudioMetadata(audioPath: string): Promise<{
+    duration: number;
+    codec: string;
+    format: string;
+    bitrate: number;
+    sampleRate: number;
+    channels: number;
+  }> {
+    return new Promise((resolve, reject) => {
+      ffmpeg.ffprobe(audioPath, (err, metadata) => {
+        if (err) {
+          console.error('Error reading audio metadata:', err.message);
+          reject(new Error(`Failed to get audio metadata: ${err.message}`));
+          return;
+        }
+
+        // Extract audio stream information
+        const audioStream = metadata.streams.find(s => s.codec_type === 'audio');
+
+        if (!audioStream) {
+          reject(new Error('No audio stream found in file'));
+          return;
+        }
+
+        const result = {
+          duration: metadata.format.duration || 0,
+          codec: audioStream.codec_name || 'unknown',
+          format: metadata.format.format_name || 'unknown',
+          bitrate: metadata.format.bit_rate || audioStream.bit_rate || 0,
+          sampleRate: typeof audioStream.sample_rate === 'string' ? parseInt(audioStream.sample_rate) : (audioStream.sample_rate || 44100),
+          channels: audioStream.channels || 2
+        };
+
+        console.log('Audio metadata retrieved:', result);
+        resolve(result);
+      });
+    });
+  }
 }

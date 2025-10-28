@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { useDrop } from 'react-dnd';
-import { Track, TimelineClip } from '../../types/timeline';
-import { MediaFile } from '../../types/media';
+import { Track, TimelineClip, TrackType } from '../../types/timeline';
+import { MediaFile, MediaType } from '../../types/media';
 import { EditAPI } from '../api/EditAPI';
 import { useMediaStore } from '../store/mediaStore';
 import { useProjectStore } from '../store/projectStore';
@@ -123,11 +123,25 @@ const TimelineTrack: React.FC<TimelineTrackProps> = ({
     gridLines.push(time);
   }
 
-  // Alternate background colors for visual distinction
-  const backgroundColor = trackIndex % 2 === 0 ? '#34495e' : '#2c3e50';
+  // Background colors based on track type
+  const getTrackBackgroundColor = () => {
+    if (track.type === TrackType.AUDIO) {
+      // Audio tracks: dark blue
+      return trackIndex % 2 === 0 ? '#1a237e' : '#1a1f5e';
+    } else {
+      // Video tracks: dark gray (existing colors)
+      return trackIndex % 2 === 0 ? '#34495e' : '#2c3e50';
+    }
+  };
+
+  const backgroundColor = getTrackBackgroundColor();
 
   // Highlight when dragging over
   const dropHighlight = isOver && canDrop ? 'rgba(102, 126, 234, 0.2)' : 'transparent';
+
+  // Generate track label with type indicator
+  const trackTypeLabel = track.type === TrackType.AUDIO ? '🎵 Audio' : '🎬 Video';
+  const trackLabel = `${trackTypeLabel} - ${track.name}`;
 
   // Handle click on track area to seek playhead
   const handleTrackClick = (e: React.MouseEvent) => {
@@ -168,14 +182,14 @@ const TimelineTrack: React.FC<TimelineTrackProps> = ({
           display: 'flex',
           alignItems: 'center',
           color: '#95a5a6',
-          fontSize: '0.8rem',
+          fontSize: '0.75rem',
           fontWeight: 600,
           position: 'sticky',
           left: 0,
           zIndex: 1,
         }}
       >
-        {track.name}
+        {trackLabel}
       </div>
 
       {/* Track content area */}

@@ -5,9 +5,10 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { Project, TimelineClip } from '../../types/timeline';
+import { Project, TimelineClip, TrackType } from '../../types/timeline';
 import { calculateTrackDuration } from '../utils/timelineCalculations';
 import { useMediaStore } from './mediaStore';
+import { migrateProject } from '../utils/projectMigration';
 
 /**
  * Command pattern structure for edit history
@@ -26,6 +27,7 @@ interface ProjectState {
 
   // Actions
   createProject: (name: string) => void;
+  resetProject: () => void;
   addClipToTrack: (
     mediaFileId: string,
     trackIndex: number,
@@ -62,11 +64,17 @@ export const useProjectStore = create<ProjectState>()(
               id: `track-0-${Date.now()}`,
               name: 'Main',
               clips: [],
+              type: TrackType.VIDEO,
+              volume: 1.0,
+              muted: false,
             },
             {
               id: `track-1-${Date.now()}`,
-              name: 'Overlay 1',
+              name: 'Audio 1',
               clips: [],
+              type: TrackType.AUDIO,
+              volume: 1.0,
+              muted: false,
             },
           ],
           duration: 0,
@@ -76,6 +84,26 @@ export const useProjectStore = create<ProjectState>()(
           currentProject: newProject,
           playheadPosition: 0,
         });
+      },
+
+      /**
+       * Reset the project - clears everything and creates a fresh project
+       */
+      resetProject: () => {
+        // Clear media store
+        const mediaStore = useMediaStore.getState();
+        mediaStore.clearMedia();
+
+        // Reset project state
+        set({
+          currentProject: null,
+          playheadPosition: 0,
+          commandHistory: [],
+          selectedClipId: null,
+        });
+
+        // Create a fresh new project
+        get().createProject('My Video Project');
       },
 
       /**
@@ -229,6 +257,11 @@ export const useProjectStore = create<ProjectState>()(
     }),
     {
       name: 'project-storage', // localStorage key
+      onRehydrateStorage: () => (state) => {
+        if (state?.currentProject) {
+          state.currentProject = migrateProject(state.currentProject);
+        }
+      }
     }
   )
 );

@@ -10,13 +10,15 @@ const MediaLibrary: React.FC = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [importProgress, setImportProgress] = useState<string | null>(null);
 
-  // Allowed video file extensions
-  const VIDEO_EXTENSIONS = ['.mp4', '.mov', '.webm'];
+  // Allowed media file extensions
+  const VIDEO_EXTENSIONS = ['.mp4', '.mov', '.webm', '.avi', '.mkv'];
+  const AUDIO_EXTENSIONS = ['.mp3', '.wav', '.aac', '.m4a', '.ogg'];
+  const MEDIA_EXTENSIONS = [...VIDEO_EXTENSIONS, ...AUDIO_EXTENSIONS];
 
-  // Check if file is a video
-  const isVideoFile = (filename: string): boolean => {
+  // Check if file is a supported media file (video or audio)
+  const isMediaFile = (filename: string): boolean => {
     const ext = filename.toLowerCase().substring(filename.lastIndexOf('.'));
-    return VIDEO_EXTENSIONS.includes(ext);
+    return MEDIA_EXTENSIONS.includes(ext);
   };
 
   // Handle drag enter - show overlay
@@ -56,29 +58,29 @@ const MediaLibrary: React.FC = () => {
     const files = Array.from(e.dataTransfer.files);
     console.log('Files dropped:', files.map(f => f.name));
 
-    // Filter to video files only
-    const videoFiles = files.filter(file => isVideoFile(file.name));
-    const invalidFiles = files.filter(file => !isVideoFile(file.name));
+    // Filter to media files only (video or audio)
+    const mediaFiles = files.filter(file => isMediaFile(file.name));
+    const invalidFiles = files.filter(file => !isMediaFile(file.name));
 
-    // Warn about non-video files
+    // Warn about non-media files
     if (invalidFiles.length > 0) {
-      console.warn('Skipping non-video files:', invalidFiles.map(f => f.name));
-      if (videoFiles.length === 0) {
-        alert(`No valid video files found. Please drop .mp4, .mov, or .webm files.`);
+      console.warn('Skipping non-media files:', invalidFiles.map(f => f.name));
+      if (mediaFiles.length === 0) {
+        alert(`No valid media files found. Please drop video or audio files.`);
         return;
       } else {
         alert(
-          `Skipped ${invalidFiles.length} non-video file(s). Importing ${videoFiles.length} video file(s)...`
+          `Skipped ${invalidFiles.length} non-media file(s). Importing ${mediaFiles.length} media file(s)...`
         );
       }
     }
 
-    // Import video files sequentially
-    for (let i = 0; i < videoFiles.length; i++) {
-      const file = videoFiles[i];
+    // Import media files sequentially
+    for (let i = 0; i < mediaFiles.length; i++) {
+      const file = mediaFiles[i];
       try {
-        setImportProgress(`Importing ${i + 1} of ${videoFiles.length} files...`);
-        console.log(`Importing file ${i + 1}/${videoFiles.length}:`, file.name);
+        setImportProgress(`Importing ${i + 1} of ${mediaFiles.length} files...`);
+        console.log(`Importing file ${i + 1}/${mediaFiles.length}:`, file.name);
 
         // Get file path using webUtils (works on both macOS and Windows)
         const filePath = getFilePathForDrop(file);
@@ -168,9 +170,9 @@ const MediaLibrary: React.FC = () => {
                 lineHeight: 1.6,
               }}
             >
-              Click Import Video to get started
+              Click Import to get started
               <br />
-              or drag and drop video files here
+              or drag and drop media files here
             </p>
           </div>
         ) : (
@@ -210,7 +212,7 @@ const MediaLibrary: React.FC = () => {
             }}
           >
             <div style={{ fontSize: '3rem', marginBottom: '10px' }}>📁</div>
-            Drop video files here
+            Drop media files here
             <div
               style={{
                 fontSize: '0.9rem',
@@ -219,7 +221,9 @@ const MediaLibrary: React.FC = () => {
                 fontWeight: 400,
               }}
             >
-              .mp4, .mov, .webm
+              Video: .mp4, .mov, .webm, .avi, .mkv
+              <br />
+              Audio: .mp3, .wav, .aac, .m4a, .ogg
             </div>
           </div>
         </div>

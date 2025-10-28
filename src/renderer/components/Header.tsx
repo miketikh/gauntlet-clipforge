@@ -7,6 +7,7 @@ const Header: React.FC = () => {
   const [isImporting, setIsImporting] = useState(false);
   const addMediaFile = useMediaStore((state) => state.addMediaFile);
   const createProject = useProjectStore((state) => state.createProject);
+  const resetProject = useProjectStore((state) => state.resetProject);
   const currentProject = useProjectStore((state) => state.currentProject);
 
   const handleImport = async () => {
@@ -87,6 +88,22 @@ const Header: React.FC = () => {
             }}
           >
             New Project
+          </button>
+        )}
+        {currentProject && (
+          <button
+            onClick={resetProject}
+            style={{
+              padding: '8px 16px',
+              background: '#e67e22',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontSize: '0.9rem',
+            }}
+          >
+            Reset Project
           </button>
         )}
         <button

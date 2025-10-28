@@ -1,7 +1,7 @@
 import React, { useCallback } from 'react';
 import { useDrag } from 'react-dnd';
 import { TimelineClip } from '../../types/timeline';
-import { MediaFile } from '../../types/media';
+import { MediaFile, MediaType } from '../../types/media';
 import { calculateClipDuration } from '../utils/timelineCalculations';
 import { useProjectStore } from '../store/projectStore';
 import { editAPI } from '../api';
@@ -140,6 +140,12 @@ const TimelineClipView: React.FC<TimelineClipViewProps> = ({
       ? displayName.substring(0, maxChars - 3) + '...'
       : displayName;
 
+  // Determine clip background color based on media type
+  const isAudioOnly = mediaFile?.type === MediaType.AUDIO;
+  const clipBackground = isAudioOnly
+    ? 'linear-gradient(135deg, #5e35b1 0%, #311b92 100%)' // Purple gradient for audio
+    : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'; // Blue/purple gradient for video
+
   return (
     <div
       ref={drag}
@@ -152,7 +158,7 @@ const TimelineClipView: React.FC<TimelineClipViewProps> = ({
         top: '10px',
         width: `${width}px`,
         height: '60px',
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        background: clipBackground,
         borderRadius: '4px',
         border: isSelected ? '3px solid #f39c12' : '1px solid #5a67d8',
         display: 'flex',
@@ -180,8 +186,8 @@ const TimelineClipView: React.FC<TimelineClipViewProps> = ({
         }
       }}
     >
-      {/* Optional thumbnail preview */}
-      {mediaFile?.thumbnail && width > 80 && (
+      {/* Optional thumbnail preview or audio icon */}
+      {width > 80 && (
         <div
           style={{
             position: 'absolute',
@@ -192,17 +198,32 @@ const TimelineClipView: React.FC<TimelineClipViewProps> = ({
             borderRadius: '2px',
             overflow: 'hidden',
             background: '#1a1a1a',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
           }}
         >
-          <img
-            src={mediaFile.thumbnail}
-            alt=""
-            style={{
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-            }}
-          />
+          {isAudioOnly ? (
+            // Show audio icon for audio-only clips
+            <div
+              style={{
+                fontSize: '1.5rem',
+              }}
+            >
+              🎵
+            </div>
+          ) : mediaFile?.thumbnail ? (
+            // Show video thumbnail
+            <img
+              src={mediaFile.thumbnail}
+              alt=""
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+              }}
+            />
+          ) : null}
         </div>
       )}
 

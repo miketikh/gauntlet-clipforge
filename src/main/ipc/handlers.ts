@@ -1,6 +1,6 @@
 import { ipcMain, dialog } from 'electron';
 import { VideoProcessor } from '../services/VideoProcessor';
-import { MediaFile, VideoMetadata } from '../../types/media';
+import { MediaFile, VideoMetadata, MediaType } from '../../types/media';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -24,11 +24,23 @@ export function registerIpcHandlers() {
         properties: ['openFile'],
         filters: [
           {
-            name: 'Videos',
-            extensions: ['mp4', 'mov', 'webm']
+            name: 'Media Files',
+            extensions: ['mp4', 'mov', 'avi', 'mkv', 'webm', 'mp3', 'wav', 'aac', 'm4a', 'ogg']
+          },
+          {
+            name: 'Video Files',
+            extensions: ['mp4', 'mov', 'avi', 'mkv', 'webm']
+          },
+          {
+            name: 'Audio Files',
+            extensions: ['mp3', 'wav', 'aac', 'm4a', 'ogg']
+          },
+          {
+            name: 'All Files',
+            extensions: ['*']
           }
         ],
-        title: 'Select a video file'
+        title: 'Select a media file'
       });
 
       if (result.canceled || result.filePaths.length === 0) {
@@ -43,8 +55,8 @@ export function registerIpcHandlers() {
   });
 
   /**
-   * Handle 'import-video' - Validates video file and extracts metadata
-   * @param filePath - Path to the video file
+   * Handle 'import-video' - Validates media file and extracts metadata
+   * @param filePath - Path to the media file (video or audio)
    * Returns: MediaFile object with metadata
    */
   ipcMain.handle('import-video', async (_event, filePath: string) => {
@@ -57,41 +69,82 @@ export function registerIpcHandlers() {
       // Get file stats for size
       const stats = fs.statSync(filePath);
 
-      // Extract metadata using VideoProcessor
-      const metadata: VideoMetadata = await videoProcessor.getVideoMetadata(filePath);
+      // Determine if file is audio or video based on extension
+      const ext = path.extname(filePath).toLowerCase();
+      const audioExts = ['.mp3', '.wav', '.aac', '.m4a', '.ogg'];
+      const isAudioFile = audioExts.includes(ext);
 
-      // Create MediaFile object
-      const mediaFile: MediaFile = {
-        id: uuidv4(),
-        path: filePath,
-        filename: path.basename(filePath),
-        duration: metadata.duration,
-        resolution: {
-          width: metadata.width,
-          height: metadata.height
-        },
-        thumbnail: '', // Will be populated by generate-thumbnail
-        fileSize: stats.size
-      };
+      // Extract metadata using appropriate method
+      let mediaFile: MediaFile;
 
-      console.log('Video imported successfully:', mediaFile.filename);
+      if (isAudioFile) {
+        // Extract audio metadata
+        const audioMetadata = await videoProcessor.getAudioMetadata(filePath);
+
+        mediaFile = {
+          id: uuidv4(),
+          path: filePath,
+          filename: path.basename(filePath),
+          type: MediaType.AUDIO,
+          duration: audioMetadata.duration,
+          resolution: undefined,
+          thumbnail: '', // Will be populated by generate-thumbnail
+          fileSize: stats.size,
+          audioMetadata: {
+            sampleRate: audioMetadata.sampleRate,
+            channels: audioMetadata.channels,
+            codec: audioMetadata.codec
+          }
+        };
+      } else {
+        // Extract video metadata
+        const videoMetadata: VideoMetadata = await videoProcessor.getVideoMetadata(filePath);
+
+        mediaFile = {
+          id: uuidv4(),
+          path: filePath,
+          filename: path.basename(filePath),
+          type: MediaType.VIDEO,
+          duration: videoMetadata.duration,
+          resolution: {
+            width: videoMetadata.width,
+            height: videoMetadata.height
+          },
+          thumbnail: '', // Will be populated by generate-thumbnail
+          fileSize: stats.size
+        };
+      }
+
+      console.log('Media file imported successfully:', mediaFile.filename, 'Type:', mediaFile.type);
       return mediaFile;
     } catch (error) {
       console.error('Error in import-video handler:', error);
-      throw new Error(`Failed to import video: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(`Failed to import media: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   });
 
   /**
-   * Handle 'generate-thumbnail' - Generates thumbnail from video
-   * @param videoPath - Path to the video file
+   * Handle 'generate-thumbnail' - Generates thumbnail from video or placeholder for audio
+   * @param videoPath - Path to the media file
    * Returns: Base64 data URL of the thumbnail
    */
   ipcMain.handle('generate-thumbnail', async (_event, videoPath: string) => {
     try {
       // Validate file exists
       if (!fs.existsSync(videoPath)) {
-        throw new Error('Video file does not exist');
+        throw new Error('Media file does not exist');
+      }
+
+      // Check if this is an audio file
+      const ext = path.extname(videoPath).toLowerCase();
+      const audioExts = ['.mp3', '.wav', '.aac', '.m4a', '.ogg'];
+      const isAudioFile = audioExts.includes(ext);
+
+      if (isAudioFile) {
+        // Return a placeholder base64 image for audio files (1x1 transparent pixel)
+        // MediaItem component will show an audio icon instead
+        const placeholderBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+        return `data:image/png;base64,${placeholderBase64}`;
       }
 
       // Create temporary output path for thumbnail
