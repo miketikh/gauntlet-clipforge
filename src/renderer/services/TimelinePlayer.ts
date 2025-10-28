@@ -452,8 +452,8 @@ export class TimelinePlayer {
 
 
   /**
-   * Transition to the next clip (state-machine controlled)
-   * This method has guards to prevent re-entry and race conditions
+   * Transition after current clip ends
+   * Instead of skipping gaps, we let the RAF loop handle playback through empty space
    */
   private async transitionToNextClip(): Promise<void> {
     console.log('[TimelinePlayer] transitionToNextClip called');
@@ -467,38 +467,32 @@ export class TimelinePlayer {
     // Set state to TRANSITIONING to block any other transitions
     this.playbackState = PlaybackState.TRANSITIONING;
 
-    const nextClip = this.getNextClip(this.currentClip!);
+    // Move playhead to end of current clip
+    const clipEndTime = this.currentClip!.endTime;
+    this.currentPlayheadPosition = clipEndTime;
+    this.callbacks.onPlayheadUpdate(clipEndTime);
 
-    if (!nextClip) {
-      // End of timeline
+    // Check if there are any more clips ahead
+    const nextClipExists = this.findNextClipAfter(clipEndTime);
+
+    if (!nextClipExists) {
+      // No more clips ahead - end playback
       console.log('[TimelinePlayer] No more clips, ending playback');
       this.pause();
       this.callbacks.onPlaybackEnd();
       return;
     }
 
-    // Calculate gap between clips
-    const gap = nextClip.startTime - this.currentClip!.endTime;
-    console.log('[TimelinePlayer] Gap to next clip:', gap, 'seconds');
+    // There are clips ahead - clear current clip and let RAF loop handle the gap
+    console.log('[TimelinePlayer] Clip ended, continuing playback through gap (black screen)');
+    this.currentClip = null;
+    this.currentMedia = null;
+    this.videoElement.pause();
+    this.videoElement.removeAttribute('src');
+    this.videoElement.load(); // Reset to black screen
 
-    if (gap > 0.1) {
-      // Jump over gap
-      console.log('[TimelinePlayer] Jumping gap to next clip at', nextClip.startTime);
-      this.currentPlayheadPosition = nextClip.startTime;
-      this.callbacks.onPlayheadUpdate(this.currentPlayheadPosition);
-    }
-
-    // Load and play next clip
-    try {
-      await this.loadAndPlayClip(nextClip);
-      // Successfully loaded and playing
-      this.playbackState = PlaybackState.PLAYING;
-      console.log('[TimelinePlayer] Transition complete, now playing clip:', nextClip.id);
-    } catch (error) {
-      console.error('[TimelinePlayer] Error loading next clip:', error);
-      this.pause();
-      this.callbacks.onPlaybackEnd();
-    }
+    // Stay in PLAYING state - RAF loop will advance through gap and load next clip
+    this.playbackState = PlaybackState.PLAYING;
   }
 
   /**
