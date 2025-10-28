@@ -2,7 +2,9 @@ import React, { useEffect, useRef, useCallback } from 'react';
 import { usePlayerStore } from '../store/playerStore';
 import { useProjectStore } from '../store/projectStore';
 import { useMediaStore } from '../store/mediaStore';
-import { findClipAtPosition } from '../utils/timelineCalculations';
+import { TimelinePlayer } from '../services/TimelinePlayer';
+import { TimelineClip } from '../../types/timeline';
+import { MediaFile } from '../../types/media';
 
 /**
  * Format seconds to MM:SS or HH:MM:SS
@@ -20,131 +22,154 @@ const formatTime = (seconds: number): string => {
 
 const Preview: React.FC = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const animationFrameRef = useRef<number>();
-  const isSeekingRef = useRef<boolean>(false); // Track if user is manually seeking
+  const timelinePlayerRef = useRef<TimelinePlayer | null>(null);
+  const isUserSeekingRef = useRef<boolean>(false); // Track if user is manually seeking
 
   const { isPlaying, currentTime, volume, playbackRate, play, pause, setCurrentTime } = usePlayerStore();
   const { currentProject, playheadPosition, setPlayheadPosition } = useProjectStore();
   const { mediaFiles } = useMediaStore();
 
-  // Find the clip at the current playhead position
-  const currentClip = currentProject?.tracks[0] // For MVP, only play Track 0
-    ? findClipAtPosition(currentProject.tracks[0], playheadPosition)
-    : null;
+  // Current clip and media being displayed
+  const [currentClip, setCurrentClip] = React.useState<TimelineClip | null>(null);
+  const [currentMedia, setCurrentMedia] = React.useState<MediaFile | null>(null);
 
-  // Get the media file for the current clip
-  const currentMedia = currentClip
-    ? mediaFiles.find((m) => m.id === currentClip.mediaFileId)
-    : null;
-
-  // Load video when clip changes (NOT on every playhead update)
+  // Initialize TimelinePlayer when project changes
   useEffect(() => {
-    if (videoRef.current && currentMedia) {
-      const videoPath = currentMedia.path;
-      // Convert to file:// URL for Electron
-      const fileUrl = videoPath.startsWith('file://')
-        ? videoPath
-        : `file://${videoPath}`;
-
-      // Only reload video if the source actually changed
-      if (videoRef.current.src !== fileUrl) {
-        videoRef.current.src = fileUrl;
+    if (!currentProject) {
+      if (timelinePlayerRef.current) {
+        timelinePlayerRef.current.destroy();
+        timelinePlayerRef.current = null;
       }
+      return;
+    }
 
-      // Calculate the time offset within the clip (accounting for trim)
-      if (currentClip) {
-        const offsetInClip = playheadPosition - currentClip.startTime;
-        const videoTime = currentClip.trimStart + offsetInClip;
-        // Only seek if not currently playing (avoid interrupting playback)
-        if (!isPlaying || isSeekingRef.current) {
-          videoRef.current.currentTime = videoTime;
-          isSeekingRef.current = false;
+    // Create TimelinePlayer
+    const player = new TimelinePlayer(currentProject, {
+      onPlayheadUpdate: (position: number) => {
+        if (!isUserSeekingRef.current) {
+          setPlayheadPosition(position);
         }
+      },
+      onPlaybackEnd: () => {
+        pause();
+      },
+      onClipChange: (clip: TimelineClip | null, media: MediaFile | null) => {
+        setCurrentClip(clip);
+        setCurrentMedia(media);
+
+        // Update video element source
+        if (videoRef.current && media) {
+          const videoPath = media.path;
+          const fileUrl = videoPath.startsWith('file://') ? videoPath : `file://${videoPath}`;
+
+          if (videoRef.current.src !== fileUrl) {
+            videoRef.current.src = fileUrl;
+          }
+        }
+      },
+    });
+
+    timelinePlayerRef.current = player;
+
+    // Update player with current settings
+    player.setVolume(volume);
+    player.setPlaybackRate(playbackRate);
+
+    // Seek to current playhead position
+    player.seek(playheadPosition);
+
+    return () => {
+      if (timelinePlayerRef.current) {
+        timelinePlayerRef.current.destroy();
+        timelinePlayerRef.current = null;
       }
-    }
-  }, [currentClip?.id, currentMedia?.path]); // Only depend on clip ID and media path, NOT playheadPosition
+    };
+  }, [currentProject]);
 
-  // Handle manual playhead scrubbing (when user drags playhead while paused)
+  // Update timeline player when project data changes
   useEffect(() => {
-    if (videoRef.current && currentClip && !isPlaying) {
-      const offsetInClip = playheadPosition - currentClip.startTime;
-      const videoTime = currentClip.trimStart + offsetInClip;
-
-      // Only seek if the time difference is significant (avoid micro-updates)
-      if (Math.abs(videoRef.current.currentTime - videoTime) > 0.1) {
-        videoRef.current.currentTime = videoTime;
-      }
+    if (timelinePlayerRef.current && currentProject) {
+      timelinePlayerRef.current.updateProject(currentProject);
     }
-  }, [playheadPosition, currentClip, isPlaying]);
+  }, [currentProject?.tracks, currentProject?.duration]);
 
-  // Update video playback state
+  // Handle play/pause changes
   useEffect(() => {
-    if (videoRef.current) {
-      if (isPlaying) {
-        videoRef.current.play().catch((error) => {
-          console.error('[Preview] Error playing video:', error);
-          pause();
+    if (!timelinePlayerRef.current) return;
+
+    if (isPlaying) {
+      timelinePlayerRef.current.play(playheadPosition);
+    } else {
+      timelinePlayerRef.current.pause();
+    }
+  }, [isPlaying]);
+
+  // Handle playhead scrubbing (when user manually moves playhead)
+  const previousPlayheadRef = useRef<number>(playheadPosition);
+  useEffect(() => {
+    // Only seek if the playhead position changed externally (not from TimelinePlayer)
+    if (Math.abs(playheadPosition - previousPlayheadRef.current) > 0.5) {
+      if (timelinePlayerRef.current && !isPlaying) {
+        isUserSeekingRef.current = true;
+        timelinePlayerRef.current.seek(playheadPosition).then(() => {
+          isUserSeekingRef.current = false;
         });
-      } else {
-        videoRef.current.pause();
       }
     }
-  }, [isPlaying, pause]);
+    previousPlayheadRef.current = playheadPosition;
+  }, [playheadPosition, isPlaying]);
 
-  // Update video volume
+  // Update volume
   useEffect(() => {
+    if (timelinePlayerRef.current) {
+      timelinePlayerRef.current.setVolume(volume);
+    }
     if (videoRef.current) {
       videoRef.current.volume = volume;
     }
   }, [volume]);
 
-  // Update video playback rate
+  // Update playback rate
   useEffect(() => {
+    if (timelinePlayerRef.current) {
+      timelinePlayerRef.current.setPlaybackRate(playbackRate);
+    }
     if (videoRef.current) {
       videoRef.current.playbackRate = playbackRate;
     }
   }, [playbackRate]);
 
-  // Sync playhead with video currentTime during playback
-  const updatePlayhead = useCallback(() => {
-    if (videoRef.current && isPlaying && currentClip) {
-      const videoTime = videoRef.current.currentTime;
-      const clipTime = videoTime - currentClip.trimStart;
-      const timelineTime = currentClip.startTime + clipTime;
+  // Sync video element with TimelinePlayer
+  useEffect(() => {
+    if (!videoRef.current) return;
 
-      // Check if we've reached the end of the clip
-      if (timelineTime >= currentClip.endTime) {
-        // Pause at the end of the clip (for MVP, multi-clip playback is next PR)
-        pause();
-        setPlayheadPosition(currentClip.endTime);
-      } else {
-        setPlayheadPosition(timelineTime);
+    const video = videoRef.current;
+
+    // Sync play/pause state
+    if (isPlaying) {
+      video.play().catch((error) => {
+        console.error('[Preview] Error playing video:', error);
+      });
+    } else {
+      video.pause();
+    }
+
+    // Update current time display
+    const updateTime = () => {
+      if (video && currentClip) {
+        const videoTime = video.currentTime;
         setCurrentTime(videoTime);
       }
+    };
 
-      // Continue updating
-      animationFrameRef.current = requestAnimationFrame(updatePlayhead);
-    }
-  }, [isPlaying, currentClip, pause, setPlayheadPosition, setCurrentTime]);
-
-  useEffect(() => {
-    if (isPlaying) {
-      animationFrameRef.current = requestAnimationFrame(updatePlayhead);
-    }
+    video.addEventListener('timeupdate', updateTime);
 
     return () => {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-      }
+      video.removeEventListener('timeupdate', updateTime);
     };
-  }, [isPlaying, updatePlayhead]);
+  }, [isPlaying, currentClip, setCurrentTime]);
 
-  // Handle video ended event
-  const handleVideoEnded = () => {
-    pause();
-  };
-
-  // Handle spacebar for play/pause
+  // Handle keyboard shortcuts
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if (e.code === 'Space' && e.target === document.body) {
@@ -156,17 +181,26 @@ const Preview: React.FC = () => {
         }
       } else if (e.code === 'ArrowLeft') {
         e.preventDefault();
-        isSeekingRef.current = true;
-        setPlayheadPosition(Math.max(0, playheadPosition - 5));
+        const newPosition = Math.max(0, playheadPosition - 5);
+        setPlayheadPosition(newPosition);
+        if (timelinePlayerRef.current) {
+          timelinePlayerRef.current.seek(newPosition);
+        }
       } else if (e.code === 'ArrowRight') {
         e.preventDefault();
-        isSeekingRef.current = true;
         const maxTime = currentProject?.duration || 0;
-        setPlayheadPosition(Math.min(maxTime, playheadPosition + 5));
+        const newPosition = Math.min(maxTime, playheadPosition + 5);
+        setPlayheadPosition(newPosition);
+        if (timelinePlayerRef.current) {
+          timelinePlayerRef.current.seek(newPosition);
+        }
       } else if (e.code === 'KeyJ') {
         e.preventDefault();
-        isSeekingRef.current = true;
-        setPlayheadPosition(Math.max(0, playheadPosition - 1));
+        const newPosition = Math.max(0, playheadPosition - 1);
+        setPlayheadPosition(newPosition);
+        if (timelinePlayerRef.current) {
+          timelinePlayerRef.current.seek(newPosition);
+        }
       } else if (e.code === 'KeyK') {
         e.preventDefault();
         if (isPlaying) {
@@ -176,8 +210,11 @@ const Preview: React.FC = () => {
         }
       } else if (e.code === 'KeyL') {
         e.preventDefault();
-        isSeekingRef.current = true;
-        setPlayheadPosition(Math.min(currentProject?.duration || 0, playheadPosition + 1));
+        const newPosition = Math.min(currentProject?.duration || 0, playheadPosition + 1);
+        setPlayheadPosition(newPosition);
+        if (timelinePlayerRef.current) {
+          timelinePlayerRef.current.seek(newPosition);
+        }
       }
     },
     [isPlaying, play, pause, playheadPosition, setPlayheadPosition, currentProject]
@@ -208,7 +245,7 @@ const Preview: React.FC = () => {
   // Calculate duration for display
   const duration = currentMedia?.duration || 0;
   const displayTime = currentClip
-    ? playheadPosition - currentClip.startTime + currentClip.trimStart
+    ? currentTime
     : 0;
 
   return (
@@ -228,18 +265,17 @@ const Preview: React.FC = () => {
           alignItems: 'center',
           justifyContent: 'center',
           position: 'relative',
-          minHeight: 0, // Allow flex child to shrink
-          minWidth: 0,  // Allow flex child to shrink
+          minHeight: 0,
+          minWidth: 0,
         }}
       >
         {currentMedia ? (
           <video
             ref={videoRef}
-            onEnded={handleVideoEnded}
             style={{
               width: '100%',
               height: '100%',
-              objectFit: 'contain', // Maintains aspect ratio, letterbox/pillarbox as needed
+              objectFit: 'contain',
             }}
           />
         ) : (
@@ -250,7 +286,9 @@ const Preview: React.FC = () => {
               fontWeight: 300,
             }}
           >
-            No clip at playhead position
+            {currentProject?.tracks[0]?.clips.length === 0
+              ? 'No clips on timeline'
+              : 'No clip at playhead position'}
           </p>
         )}
       </div>
@@ -269,14 +307,14 @@ const Preview: React.FC = () => {
         {/* Play/Pause Button */}
         <button
           onClick={handlePlayPause}
-          disabled={!currentMedia}
+          disabled={!currentMedia && !currentProject?.tracks[0]?.clips.length}
           style={{
             padding: '8px 16px',
-            background: currentMedia ? '#3498db' : '#555',
+            background: (currentMedia || currentProject?.tracks[0]?.clips.length) ? '#3498db' : '#555',
             color: 'white',
             border: 'none',
             borderRadius: '4px',
-            cursor: currentMedia ? 'pointer' : 'not-allowed',
+            cursor: (currentMedia || currentProject?.tracks[0]?.clips.length) ? 'pointer' : 'not-allowed',
             fontSize: '14px',
             fontWeight: 500,
           }}
@@ -294,6 +332,17 @@ const Preview: React.FC = () => {
           }}
         >
           {formatTime(displayTime)} / {formatTime(duration)}
+        </div>
+
+        {/* Playhead Position Display */}
+        <div
+          style={{
+            color: '#95a5a6',
+            fontSize: '12px',
+            fontFamily: 'monospace',
+          }}
+        >
+          Timeline: {formatTime(playheadPosition)}
         </div>
 
         {/* Volume Control */}

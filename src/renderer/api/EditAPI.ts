@@ -63,22 +63,41 @@ export class EditAPI {
       );
     }
 
-    // Validation: Check for overlapping clips on the same track
+    // Handle overlaps by pushing affected clips forward (insert behavior)
     const track = projectStore.currentProject.tracks[trackIndex];
-    const endTime = startTime + mediaFile.duration;
+    const newClipEndTime = startTime + mediaFile.duration;
 
-    const hasOverlap = track.clips.some(clip => {
-      return !(endTime <= clip.startTime || startTime >= clip.endTime);
+    // Find ALL clips that would conflict with the new clip
+    // A clip conflicts if it overlaps with the new clip's time range
+    const conflictingClips = track.clips.filter(clip => {
+      // Overlap occurs if: new clip ends after existing starts AND new clip starts before existing ends
+      return newClipEndTime > clip.startTime && startTime < clip.endTime;
     });
 
-    if (hasOverlap) {
-      // Find the next available position
-      const nextAvailablePosition = this.findNextAvailablePosition(trackIndex, startTime);
-      console.warn(
-        `[EditAPI] Clip would overlap at position ${startTime}. ` +
-        `Snapping to next available position: ${nextAvailablePosition}`
+    if (conflictingClips.length > 0) {
+      // Sort by start time (ascending)
+      conflictingClips.sort((a, b) => a.startTime - b.startTime);
+
+      // Find the first conflicting clip
+      const firstConflict = conflictingClips[0];
+
+      // Calculate how much to shift - we need to push everything to make room
+      const shiftAmount = newClipEndTime - firstConflict.startTime;
+
+      // Find ALL clips that need to be pushed (those at or after the first conflict)
+      const clipsToShift = track.clips.filter(c => c.startTime >= firstConflict.startTime);
+
+      console.log(
+        `[EditAPI] Inserting clip at ${startTime}s. Pushing ${clipsToShift.length} clip(s) forward by ${shiftAmount.toFixed(2)}s`
       );
-      startTime = nextAvailablePosition;
+
+      // Push all affected clips forward
+      for (const clip of clipsToShift) {
+        projectStore.updateClip(clip.id, {
+          startTime: clip.startTime + shiftAmount,
+          endTime: clip.endTime + shiftAmount,
+        });
+      }
     }
 
     // Generate clip ID before adding
@@ -315,21 +334,45 @@ export class EditAPI {
       );
     }
 
-    // Validation: Check for overlapping clips on target track
+    // Handle overlaps by pushing affected clips forward (same as addClip)
     const track = projectStore.currentProject.tracks[newTrackIndex];
     const clipDuration = clip.endTime - clip.startTime;
     const newEndTime = newStartTime + clipDuration;
 
-    const hasOverlap = track.clips.some(c => {
+    // Find conflicting clips on the target track (excluding the clip being moved)
+    const conflictingClips = track.clips.filter(c => {
       // Ignore the clip being moved if it's on the same track
       if (c.id === clipId) return false;
-      return !(newEndTime <= c.startTime || newStartTime >= c.endTime);
+      // Overlap occurs if: moved clip ends after existing starts AND moved clip starts before existing ends
+      return newEndTime > c.startTime && newStartTime < c.endTime;
     });
 
-    if (hasOverlap) {
-      throw new Error(
-        `Cannot move clip to position ${newStartTime} on track ${newTrackIndex}: would overlap with existing clip`
+    if (conflictingClips.length > 0) {
+      // Sort by start time (ascending)
+      conflictingClips.sort((a, b) => a.startTime - b.startTime);
+
+      // Find the first conflicting clip
+      const firstConflict = conflictingClips[0];
+
+      // Calculate how much to shift
+      const shiftAmount = newEndTime - firstConflict.startTime;
+
+      // Find ALL clips that need to be pushed (those at or after the first conflict, excluding moved clip)
+      const clipsToShift = track.clips.filter(
+        c => c.id !== clipId && c.startTime >= firstConflict.startTime
       );
+
+      console.log(
+        `[EditAPI] Moving clip to ${newStartTime}s. Pushing ${clipsToShift.length} clip(s) forward by ${shiftAmount.toFixed(2)}s`
+      );
+
+      // Push all affected clips forward
+      for (const c of clipsToShift) {
+        projectStore.updateClip(c.id, {
+          startTime: c.startTime + shiftAmount,
+          endTime: c.endTime + shiftAmount,
+        });
+      }
     }
 
     // Update clip position
@@ -414,36 +457,4 @@ export class EditAPI {
     return null;
   }
 
-  /**
-   * Find the next available position on a track to avoid overlaps
-   */
-  private findNextAvailablePosition(trackIndex: number, preferredStart: number): number {
-    const projectStore = useProjectStore.getState();
-    if (!projectStore.currentProject) {
-      return preferredStart;
-    }
-
-    const track = projectStore.currentProject.tracks[trackIndex];
-    if (track.clips.length === 0) {
-      return preferredStart;
-    }
-
-    // Sort clips by start time
-    const sortedClips = [...track.clips].sort((a, b) => a.startTime - b.startTime);
-
-    // Try to place at preferred position first
-    let candidatePosition = preferredStart;
-
-    for (const clip of sortedClips) {
-      if (candidatePosition < clip.startTime) {
-        // Found a gap before this clip
-        return candidatePosition;
-      }
-      // Move past this clip
-      candidatePosition = Math.max(candidatePosition, clip.endTime);
-    }
-
-    // No gaps found, place after the last clip
-    return candidatePosition;
-  }
 }

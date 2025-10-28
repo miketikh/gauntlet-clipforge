@@ -27,10 +27,10 @@ const TimelineTrack: React.FC<TimelineTrackProps> = ({
   const mediaFiles = useMediaStore((state) => state.mediaFiles);
   const setPlayheadPosition = useProjectStore((state) => state.setPlayheadPosition);
 
-  // Setup drop target
+  // Setup drop target - accepts both MEDIA_ITEM (from library) and TIMELINE_CLIP (repositioning)
   const [{ isOver, canDrop }, drop] = useDrop(() => ({
-    accept: 'MEDIA_ITEM',
-    drop: (item: { mediaFileId: string; mediaFile: MediaFile }, monitor) => {
+    accept: ['MEDIA_ITEM', 'TIMELINE_CLIP'],
+    drop: (item: { mediaFileId?: string; mediaFile?: MediaFile; clipId?: string; trackIndex?: number }, monitor) => {
       const offset = monitor.getClientOffset();
       if (!offset || !trackContentRef.current) return;
 
@@ -39,17 +39,32 @@ const TimelineTrack: React.FC<TimelineTrackProps> = ({
       const dropX = offset.x - trackRect.left;
       const dropTimeSeconds = Math.max(0, dropX / zoom);
 
-      // Add clip to timeline via EditAPI
-      console.log('[TimelineTrack] Dropping media at:', {
-        mediaFileId: item.mediaFileId,
-        trackIndex,
-        dropTimeSeconds,
-      });
+      // Determine if this is a new clip from library or repositioning existing clip
+      if (item.mediaFileId) {
+        // Dropping from media library - add new clip
+        console.log('[TimelineTrack] Dropping media at:', {
+          mediaFileId: item.mediaFileId,
+          trackIndex,
+          dropTimeSeconds,
+        });
 
-      editAPI.addClip(item.mediaFileId, trackIndex, dropTimeSeconds).catch((err) => {
-        console.error('[TimelineTrack] Failed to add clip:', err);
-        alert(`Failed to add clip: ${err.message}`);
-      });
+        editAPI.addClip(item.mediaFileId, trackIndex, dropTimeSeconds).catch((err) => {
+          console.error('[TimelineTrack] Failed to add clip:', err);
+          alert(`Failed to add clip: ${err.message}`);
+        });
+      } else if (item.clipId) {
+        // Repositioning existing clip
+        console.log('[TimelineTrack] Repositioning clip:', {
+          clipId: item.clipId,
+          trackIndex,
+          dropTimeSeconds,
+        });
+
+        editAPI.moveClip(item.clipId, trackIndex, dropTimeSeconds).catch((err) => {
+          console.error('[TimelineTrack] Failed to move clip:', err);
+          alert(`Failed to move clip: ${err.message}`);
+        });
+      }
     },
     collect: (monitor) => ({
       isOver: monitor.isOver(),

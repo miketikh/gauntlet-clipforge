@@ -845,14 +845,14 @@ Implement real-time video preview with play/pause controls and timeline synchron
 
 ---
 
-### PR 1.5.2: Multi-Clip Timeline Playback (Composition Rendering)
+### PR 1.5.2: Multi-Clip Timeline Playback (Composition Rendering) [x]
 
 **Goal:** Implement seamless playback across multiple timeline clips
 
 **Tasks:**
-- [ ] Read `src/renderer/components/Preview.tsx` to understand single clip playback
-- [ ] Read `src/renderer/store/projectStore.ts` to see timeline structure
-- [ ] Create NEW: `src/renderer/services/TimelinePlayer.ts` - Timeline playback engine:
+- [x] Read `src/renderer/components/Preview.tsx` to understand single clip playback
+- [x] Read `src/renderer/store/projectStore.ts` to see timeline structure
+- [x] Create NEW: `src/renderer/services/TimelinePlayer.ts` - Timeline playback engine:
   - `constructor(project: Project)` - Initialize with project data
   - `async play(startTime: number)` - Start playback from time position
   - `pause()` - Pause playback
@@ -863,20 +863,20 @@ Implement real-time video preview with play/pause controls and timeline synchron
     - Calculate playback offset within clip (accounting for trim points)
     - Switch between clips seamlessly when playhead crosses clip boundaries
     - Update playheadPosition continuously during playback
-- [ ] Implement clip switching logic:
+- [x] Implement clip switching logic:
   - When playhead reaches end of clip, immediately switch to next clip
   - Preload next clip 1 second before transition (avoid loading delay)
   - Handle gaps in timeline (pause playback, or skip to next clip)
-- [ ] Update `src/renderer/components/Preview.tsx`:
+- [x] Update `src/renderer/components/Preview.tsx`:
   - Initialize TimelinePlayer with current project
   - Play/pause buttons control TimelinePlayer instead of single <video>
   - Display composite view (only one clip visible at a time)
   - Handle case when playhead is in gap (show black frame or last frame)
-- [ ] Add multi-track support (optional for MVP, required for picture-in-picture):
+- [x] Add multi-track support (optional for MVP, required for picture-in-picture):
   - If both Track 0 and Track 1 have clips at playhead position, composite them
   - Track 1 overlays Track 0 (picture-in-picture positioning)
   - For MVP: Can simplify to "only play Track 0" and skip overlay logic
-- [ ] Sync playback with timeline:
+- [x] Sync playback with timeline:
   - Update playheadPosition in projectStore during playback
   - When user scrubs playhead, seek TimelinePlayer to new position
   - Pause/resume playback based on playerStore.isPlaying

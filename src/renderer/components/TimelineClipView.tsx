@@ -1,4 +1,5 @@
 import React, { useCallback } from 'react';
+import { useDrag } from 'react-dnd';
 import { TimelineClip } from '../../types/timeline';
 import { MediaFile } from '../../types/media';
 import { calculateClipDuration } from '../utils/timelineCalculations';
@@ -27,6 +28,15 @@ const TimelineClipView: React.FC<TimelineClipViewProps> = ({
 
   // Check if playhead is over this clip
   const isPlayheadOverClip = playheadPosition >= clip.startTime && playheadPosition <= clip.endTime;
+
+  // Setup drag source for repositioning
+  const [{ isDragging }, drag] = useDrag(() => ({
+    type: 'TIMELINE_CLIP',
+    item: { clipId: clip.id, clip, trackIndex: clip.trackIndex },
+    collect: (monitor) => ({
+      isDragging: monitor.isDragging(),
+    }),
+  }));
 
   // Handle clip selection
   const handleClick = useCallback((e: React.MouseEvent) => {
@@ -132,6 +142,7 @@ const TimelineClipView: React.FC<TimelineClipViewProps> = ({
 
   return (
     <div
+      ref={drag}
       data-clip-id={clip.id}
       onClick={handleClick}
       onContextMenu={handleContextMenu}
@@ -151,18 +162,19 @@ const TimelineClipView: React.FC<TimelineClipViewProps> = ({
         fontSize: '0.75rem',
         fontWeight: 500,
         overflow: 'hidden',
-        cursor: 'pointer',
+        cursor: isDragging ? 'grabbing' : 'pointer',
         boxShadow: isSelected ? '0 4px 12px rgba(243, 156, 18, 0.5)' : '0 2px 4px rgba(0, 0, 0, 0.3)',
         transition: 'transform 0.1s ease, box-shadow 0.1s ease',
+        opacity: isDragging ? 0.5 : 1,
       }}
       onMouseEnter={(e) => {
-        if (!isSelected) {
+        if (!isSelected && !isDragging) {
           e.currentTarget.style.transform = 'translateY(-2px)';
           e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.4)';
         }
       }}
       onMouseLeave={(e) => {
-        if (!isSelected) {
+        if (!isSelected && !isDragging) {
           e.currentTarget.style.transform = 'translateY(0)';
           e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.3)';
         }

@@ -38,7 +38,7 @@ const TimelineRuler: React.FC<TimelineRulerProps> = ({ duration, pixelsPerSecond
     if (!rulerRef.current) return;
 
     const rect = rulerRef.current.getBoundingClientRect();
-    const offsetX = e.clientX - rect.left;
+    const offsetX = e.clientX - rect.left - 120; // Account for 120px track label offset
     const clickedPosition = offsetX / pixelsPerSecond;
 
     // Constrain to valid range
@@ -48,18 +48,34 @@ const TimelineRuler: React.FC<TimelineRulerProps> = ({ duration, pixelsPerSecond
 
   return (
     <div
-      ref={rulerRef}
-      onClick={handleRulerClick}
       style={{
-        position: 'relative',
-        width: `${totalWidth}px`,
+        display: 'flex',
         height: '40px',
         background: '#2c3e50',
         borderBottom: '1px solid #1a1a1a',
-        userSelect: 'none',
-        cursor: 'pointer',
       }}
     >
+      {/* Spacer to match track label width */}
+      <div
+        style={{
+          minWidth: '120px',
+          background: '#263238',
+          borderRight: '1px solid #1a1a1a',
+        }}
+      />
+
+      {/* Ruler content area */}
+      <div
+        ref={rulerRef}
+        onClick={handleRulerClick}
+        style={{
+          position: 'relative',
+          width: `${totalWidth}px`,
+          height: '100%',
+          userSelect: 'none',
+          cursor: 'pointer',
+        }}
+      >
       {/* Major time markers (every 5 seconds) */}
       {markers.map((time) => (
         <div
@@ -112,6 +128,7 @@ const TimelineRuler: React.FC<TimelineRulerProps> = ({ duration, pixelsPerSecond
           }}
         />
       ))}
+      </div>
     </div>
   );
 };
