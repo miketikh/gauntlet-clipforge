@@ -1,5 +1,6 @@
 import React, { useRef } from 'react';
 import { useProjectStore } from '../store/projectStore';
+import { timeToPixels, pixelsToTime } from '../utils/timelineCalculations';
 
 interface TimelineRulerProps {
   duration: number; // Total timeline duration in seconds
@@ -10,7 +11,7 @@ const TimelineRuler: React.FC<TimelineRulerProps> = ({ duration, pixelsPerSecond
   const rulerRef = useRef<HTMLDivElement>(null);
   const setPlayheadPosition = useProjectStore((state) => state.setPlayheadPosition);
 
-  const totalWidth = duration * pixelsPerSecond;
+  const totalWidth = timeToPixels(duration, pixelsPerSecond);
 
   // Generate time markers every 5 seconds
   const markers = [];
@@ -38,51 +39,40 @@ const TimelineRuler: React.FC<TimelineRulerProps> = ({ duration, pixelsPerSecond
     if (!rulerRef.current) return;
 
     const rect = rulerRef.current.getBoundingClientRect();
-    const offsetX = e.clientX - rect.left - 120; // Account for 120px track label offset
-    const clickedPosition = offsetX / pixelsPerSecond;
+    const offsetX = e.clientX - rect.left;
+    // Prevent negative offset when clicking outside ruler bounds
+    const clampedOffsetX = Math.max(0, offsetX);
+    const clickedPosition = pixelsToTime(clampedOffsetX, pixelsPerSecond);
+
+    // Snap to whole seconds
+    const snappedPosition = Math.round(clickedPosition);
 
     // Constrain to valid range
-    const newPosition = Math.max(0, Math.min(clickedPosition, duration));
+    const newPosition = Math.max(0, Math.min(snappedPosition, duration));
     setPlayheadPosition(newPosition);
   };
 
   return (
     <div
+      ref={rulerRef}
+      onClick={handleRulerClick}
       style={{
-        display: 'flex',
+        position: 'relative',
+        width: `${totalWidth}px`,
         height: '40px',
         background: '#2c3e50',
         borderBottom: '1px solid #1a1a1a',
+        userSelect: 'none',
+        cursor: 'pointer',
       }}
     >
-      {/* Spacer to match track label width */}
-      <div
-        style={{
-          minWidth: '120px',
-          background: '#263238',
-          borderRight: '1px solid #1a1a1a',
-        }}
-      />
-
-      {/* Ruler content area */}
-      <div
-        ref={rulerRef}
-        onClick={handleRulerClick}
-        style={{
-          position: 'relative',
-          width: `${totalWidth}px`,
-          height: '100%',
-          userSelect: 'none',
-          cursor: 'pointer',
-        }}
-      >
       {/* Major time markers (every 5 seconds) */}
       {markers.map((time) => (
         <div
           key={`marker-${time}`}
           style={{
             position: 'absolute',
-            left: `${time * pixelsPerSecond}px`,
+            left: `${timeToPixels(time, pixelsPerSecond)}px`,
             top: 0,
             height: '100%',
             display: 'flex',
@@ -119,7 +109,7 @@ const TimelineRuler: React.FC<TimelineRulerProps> = ({ duration, pixelsPerSecond
           key={`tick-${time}`}
           style={{
             position: 'absolute',
-            left: `${time * pixelsPerSecond}px`,
+            left: `${timeToPixels(time, pixelsPerSecond)}px`,
             top: 0,
             width: '1px',
             height: '8px',
@@ -128,7 +118,6 @@ const TimelineRuler: React.FC<TimelineRulerProps> = ({ duration, pixelsPerSecond
           }}
         />
       ))}
-      </div>
     </div>
   );
 };

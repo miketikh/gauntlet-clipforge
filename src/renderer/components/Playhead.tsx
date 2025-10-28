@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useProjectStore } from '../store/projectStore';
+import { TRACK_LABEL_WIDTH, timeToPixels, pixelsToTime } from '../utils/timelineCalculations';
 
 interface PlayheadProps {
   position: number; // Current playhead position in seconds
@@ -13,7 +14,7 @@ const Playhead: React.FC<PlayheadProps> = ({ position, pixelsPerSecond, trackCou
   const setPlayheadPosition = useProjectStore((state) => state.setPlayheadPosition);
   const currentProject = useProjectStore((state) => state.currentProject);
 
-  const xPosition = position * pixelsPerSecond;
+  const xPosition = timeToPixels(position, pixelsPerSecond);
   const trackHeight = 80; // Height per track
   const totalHeight = trackCount * trackHeight + trackCount; // +trackCount for borders
 
@@ -34,12 +35,16 @@ const Playhead: React.FC<PlayheadProps> = ({ position, pixelsPerSecond, trackCou
     if (!containerRef.current) return position;
 
     const rect = containerRef.current.getBoundingClientRect();
-    const offsetX = mouseX - rect.left;
-    const newPosition = offsetX / pixelsPerSecond;
+    // Prevent negative offset when dragging past left edge
+    const offsetX = Math.max(0, mouseX - rect.left);
+    const newPosition = pixelsToTime(offsetX, pixelsPerSecond);
+
+    // Snap to whole seconds
+    const snappedPosition = Math.round(newPosition);
 
     // Constrain to valid range
     const projectDuration = currentProject?.duration || 60;
-    return Math.max(0, Math.min(newPosition, projectDuration));
+    return Math.max(0, Math.min(snappedPosition, projectDuration));
   };
 
   // Handle mouse down on playhead handle
@@ -76,36 +81,22 @@ const Playhead: React.FC<PlayheadProps> = ({ position, pixelsPerSecond, trackCou
       ref={containerRef}
       style={{
         position: 'absolute',
-        left: '120px', // Offset for track labels
-        top: '40px', // Offset for ruler
+        left: `${TRACK_LABEL_WIDTH}px`, // Offset for track labels
+        top: '0', // Start at the very top (ruler level)
         pointerEvents: 'none',
-        zIndex: 100,
-        width: `${(currentProject?.duration || 60) * pixelsPerSecond}px`,
+        zIndex: 1000, // High z-index to overlay everything
+        width: `${timeToPixels(currentProject?.duration || 60, pixelsPerSecond)}px`,
+        height: '100%',
       }}
     >
       <div
         style={{
           position: 'absolute',
-          transform: `translateX(${xPosition}px)`,
-          transition: isDragging ? 'none' : 'transform 0.1s ease-out',
+          left: `${xPosition}px`, // Direct positioning using utility function
+          transition: isDragging ? 'none' : 'left 0.1s ease-out',
+          height: '100%',
         }}
       >
-        {/* Triangular handle at top - draggable */}
-        <div
-          onMouseDown={handleMouseDown}
-          style={{
-            width: 0,
-            height: 0,
-            borderLeft: '8px solid transparent',
-            borderRight: '8px solid transparent',
-            borderTop: `10px solid ${isDragging ? '#ff6b6b' : '#e74c3c'}`,
-            marginLeft: '-8px',
-            marginBottom: '-1px',
-            cursor: 'ew-resize',
-            pointerEvents: 'auto',
-          }}
-        />
-
         {/* Time display tooltip */}
         {isDragging && (
           <div
@@ -123,19 +114,39 @@ const Playhead: React.FC<PlayheadProps> = ({ position, pixelsPerSecond, trackCou
               whiteSpace: 'nowrap',
               pointerEvents: 'none',
               boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)',
+              zIndex: 10,
             }}
           >
             {formatTime(position)}
           </div>
         )}
 
-        {/* Vertical red line */}
+        {/* Triangular handle at top - draggable - positioned on ruler */}
+        <div
+          onMouseDown={handleMouseDown}
+          style={{
+            position: 'absolute',
+            top: '0',
+            left: '-8px',
+            width: 0,
+            height: 0,
+            borderLeft: '8px solid transparent',
+            borderRight: '8px solid transparent',
+            borderTop: `10px solid ${isDragging ? '#ff6b6b' : '#e74c3c'}`,
+            cursor: 'ew-resize',
+            pointerEvents: 'auto',
+          }}
+        />
+
+        {/* Vertical red line - spans from ruler through all tracks */}
         <div
           style={{
-            width: '2px',
-            height: `${totalHeight}px`,
+            position: 'absolute',
+            top: '10px', // Start just below triangle
+            left: '0px', // Centered at container position to align with ruler ticks
+            width: '1px', // Match ruler tick width for perfect alignment
+            height: 'calc(100% - 10px)',
             background: isDragging ? '#ff6b6b' : '#e74c3c',
-            marginLeft: '-1px',
             pointerEvents: 'none',
           }}
         />

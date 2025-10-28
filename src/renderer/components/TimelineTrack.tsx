@@ -1,17 +1,19 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { useDrop } from 'react-dnd';
-import { Track } from '../../types/timeline';
+import { Track, TimelineClip } from '../../types/timeline';
 import { MediaFile } from '../../types/media';
 import { EditAPI } from '../api/EditAPI';
 import { useMediaStore } from '../store/mediaStore';
 import { useProjectStore } from '../store/projectStore';
 import TimelineClipView from './TimelineClipView';
+import { formatTime } from '../utils/timelineCalculations';
 
 interface TimelineTrackProps {
   track: Track;
   zoom: number; // pixelsPerSecond
   duration: number; // Total timeline duration
   trackIndex: number; // For alternating background colors
+  onDragPositionChange?: (position: number | null) => void; // Callback for ruler indicator
 }
 
 const editAPI = new EditAPI();
@@ -20,24 +22,32 @@ const TimelineTrack: React.FC<TimelineTrackProps> = ({
   track,
   zoom,
   duration,
-  trackIndex
+  trackIndex,
+  onDragPositionChange
 }) => {
   const totalWidth = duration * zoom;
   const trackContentRef = useRef<HTMLDivElement>(null);
   const mediaFiles = useMediaStore((state) => state.mediaFiles);
   const setPlayheadPosition = useProjectStore((state) => state.setPlayheadPosition);
 
+  // Track hover position for ghost preview
+  const [hoverPosition, setHoverPosition] = useState<number | null>(null);
+  const [draggedItemDuration, setDraggedItemDuration] = useState<number>(0);
+
   // Setup drop target - accepts both MEDIA_ITEM (from library) and TIMELINE_CLIP (repositioning)
-  const [{ isOver, canDrop }, drop] = useDrop(() => ({
+  const [{ isOver, canDrop, draggedItem }, drop] = useDrop(() => ({
     accept: ['MEDIA_ITEM', 'TIMELINE_CLIP'],
-    drop: (item: { mediaFileId?: string; mediaFile?: MediaFile; clipId?: string; trackIndex?: number }, monitor) => {
+    drop: (item: { mediaFileId?: string; mediaFile?: MediaFile; clipId?: string; clip?: TimelineClip; trackIndex?: number }, monitor) => {
       const offset = monitor.getClientOffset();
       if (!offset || !trackContentRef.current) return;
 
       // Calculate drop position in seconds
       const trackRect = trackContentRef.current.getBoundingClientRect();
       const dropX = offset.x - trackRect.left;
-      const dropTimeSeconds = Math.max(0, dropX / zoom);
+      const rawPosition = Math.max(0, dropX / zoom);
+
+      // Snap to whole seconds
+      const dropTimeSeconds = Math.round(rawPosition);
 
       // Determine if this is a new clip from library or repositioning existing clip
       if (item.mediaFileId) {
@@ -66,11 +76,46 @@ const TimelineTrack: React.FC<TimelineTrackProps> = ({
         });
       }
     },
+    hover: (item: { mediaFileId?: string; mediaFile?: MediaFile; clipId?: string; clip?: TimelineClip }, monitor) => {
+      const offset = monitor.getClientOffset();
+
+      if (!offset || !trackContentRef.current) {
+        setHoverPosition(null);
+        onDragPositionChange?.(null);
+        return;
+      }
+
+      // Simple calculation: where is the cursor right now?
+      const trackRect = trackContentRef.current.getBoundingClientRect();
+      const hoverX = offset.x - trackRect.left;
+      const rawPosition = Math.max(0, hoverX / zoom);
+
+      // Snap to whole seconds
+      const dropPositionSeconds = Math.round(rawPosition);
+
+      // Calculate duration for ghost preview
+      let itemDuration = 0;
+      if (item.mediaFile) {
+        // New clip from library - use full media duration
+        itemDuration = item.mediaFile.duration;
+      } else if (item.clip) {
+        // Existing clip being repositioned - use clip duration
+        itemDuration = item.clip.endTime - item.clip.startTime;
+      }
+      setDraggedItemDuration(itemDuration);
+
+      // The clip will START at this position (snapped to whole seconds)
+      setHoverPosition(dropPositionSeconds);
+
+      // Update parent component for arrow indicator on ruler
+      onDragPositionChange?.(dropPositionSeconds);
+    },
     collect: (monitor) => ({
       isOver: monitor.isOver(),
       canDrop: monitor.canDrop(),
+      draggedItem: monitor.getItem(),
     }),
-  }));
+  }), [zoom, onDragPositionChange]);
 
   // Generate grid lines every 5 seconds
   const gridLines = [];
@@ -96,7 +141,10 @@ const TimelineTrack: React.FC<TimelineTrackProps> = ({
     const rect = trackContentRef.current.getBoundingClientRect();
     const offsetX = e.clientX - rect.left;
     const clickedPosition = offsetX / zoom;
-    const newPosition = Math.max(0, Math.min(clickedPosition, duration));
+
+    // Snap to whole seconds
+    const snappedPosition = Math.round(clickedPosition);
+    const newPosition = Math.max(0, Math.min(snappedPosition, duration));
     setPlayheadPosition(newPosition);
   };
 
@@ -162,22 +210,54 @@ const TimelineTrack: React.FC<TimelineTrackProps> = ({
           />
         ))}
 
-        {/* Drop zone indicator */}
-        {isOver && canDrop && (
+        {/* Ghost preview while dragging - shows where clip will land */}
+        {isOver && canDrop && hoverPosition !== null && draggedItemDuration > 0 && (
           <div
             style={{
               position: 'absolute',
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%, -50%)',
-              color: '#667eea',
-              fontSize: '0.875rem',
-              fontWeight: 600,
+              left: `${hoverPosition * zoom}px`, // Clip starts at cursor position
+              top: '10px',
+              width: `${draggedItemDuration * zoom}px`,
+              height: '60px',
+              background: 'rgba(243, 156, 18, 0.2)', // Yellow tint to match indicator
+              border: '2px dashed #f39c12',
+              borderRadius: '4px',
               pointerEvents: 'none',
-              textShadow: '0 1px 3px rgba(0, 0, 0, 0.5)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 50,
             }}
           >
-            Drop here
+            {/* Timecode display in ghost preview - shows clip start time */}
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '4px',
+              }}
+            >
+              <span
+                style={{
+                  color: '#fff',
+                  fontSize: '0.75rem',
+                  fontWeight: 600,
+                  textShadow: '0 1px 3px rgba(0, 0, 0, 0.8)',
+                }}
+              >
+                Start: {formatTime(hoverPosition)}
+              </span>
+              <span
+                style={{
+                  color: '#95a5a6',
+                  fontSize: '0.65rem',
+                  textShadow: '0 1px 2px rgba(0, 0, 0, 0.8)',
+                }}
+              >
+                {Math.floor(draggedItemDuration)}s
+              </span>
+            </div>
           </div>
         )}
 

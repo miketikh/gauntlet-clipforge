@@ -36,7 +36,7 @@ const TimelineClipView: React.FC<TimelineClipViewProps> = ({
     collect: (monitor) => ({
       isDragging: monitor.isDragging(),
     }),
-  }));
+  }), [clip]);
 
   // Handle clip selection
   const handleClick = useCallback((e: React.MouseEvent) => {

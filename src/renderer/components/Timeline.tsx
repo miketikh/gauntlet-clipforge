@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useDragLayer } from 'react-dnd';
 import { useProjectStore } from '../store/projectStore';
 import TimelineRuler from './TimelineRuler';
 import TimelineTrack from './TimelineTrack';
 import Playhead from './Playhead';
 import { editAPI } from '../api';
+import { TRACK_LABEL_WIDTH, timeToPixels } from '../utils/timelineCalculations';
 
 const Timeline: React.FC = () => {
   // Subscribe to project store
@@ -17,6 +19,16 @@ const Timeline: React.FC = () => {
 
   // Ref for timeline container to handle focus
   const timelineRef = useRef<HTMLDivElement>(null);
+  const tracksContainerRef = useRef<HTMLDivElement>(null);
+
+  // Track drag position for ruler indicator
+  const [dragPosition, setDragPosition] = useState<number | null>(null);
+
+  // Monitor drag state globally
+  const { isDragging, itemType } = useDragLayer((monitor) => ({
+    isDragging: monitor.isDragging(),
+    itemType: monitor.getItemType(),
+  }));
 
   // Constants for zoom
   const MIN_ZOOM = 20;
@@ -81,6 +93,13 @@ const Timeline: React.FC = () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [handleKeyDown]);
+
+  // Reset drag position when drag ends
+  useEffect(() => {
+    if (!isDragging) {
+      setDragPosition(null);
+    }
+  }, [isDragging]);
 
   // Click on timeline container to focus it (and deselect clips)
   const handleTimelineClick = useCallback((e: React.MouseEvent) => {
@@ -232,20 +251,26 @@ const Timeline: React.FC = () => {
           position: 'relative',
         }}
       >
-        {/* Timeline Ruler */}
-        <div
-          style={{
-            position: 'sticky',
-            top: 0,
-            zIndex: 10,
-            marginLeft: '120px', // Offset for track labels
-          }}
-        >
+        {/* Timeline Ruler with Label Spacer */}
+        <div style={{ display: 'flex', position: 'sticky', top: 0, zIndex: 10 }}>
+          {/* Spacer to match track labels */}
+          <div
+            style={{
+              minWidth: '120px',
+              height: '40px',
+              background: '#263238',
+              borderRight: '1px solid #1a1a1a',
+              position: 'sticky',
+              left: 0,
+              zIndex: 11,
+            }}
+          />
+          {/* Ruler content */}
           <TimelineRuler duration={projectDuration} pixelsPerSecond={pixelsPerSecond} />
         </div>
 
         {/* Timeline Tracks */}
-        <div style={{ position: 'relative' }}>
+        <div ref={tracksContainerRef} style={{ position: 'relative' }}>
           {currentProject?.tracks.map((track, index) => (
             <TimelineTrack
               key={track.id}
@@ -253,6 +278,7 @@ const Timeline: React.FC = () => {
               zoom={pixelsPerSecond}
               duration={projectDuration}
               trackIndex={index}
+              onDragPositionChange={setDragPosition}
             />
           ))}
 
@@ -271,14 +297,54 @@ const Timeline: React.FC = () => {
           )}
         </div>
 
-        {/* Playhead Indicator */}
-        {currentProject && (
-          <Playhead
-            position={playheadPosition}
-            pixelsPerSecond={pixelsPerSecond}
-            trackCount={currentProject.tracks.length}
-          />
-        )}
+        {/* Indicators Container - spans full height from top */}
+        <div
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            pointerEvents: 'none',
+            zIndex: 1000,
+          }}
+        >
+          {/* Playhead Indicator */}
+          {currentProject && (
+            <Playhead
+              position={playheadPosition}
+              pixelsPerSecond={pixelsPerSecond}
+              trackCount={currentProject.tracks.length}
+            />
+          )}
+
+          {/* Small Arrow Drop Indicator - only during drag */}
+          {isDragging && (itemType === 'MEDIA_ITEM' || itemType === 'TIMELINE_CLIP') && dragPosition !== null && currentProject && (
+            <div
+              style={{
+                position: 'absolute',
+                left: `${TRACK_LABEL_WIDTH + timeToPixels(dragPosition, pixelsPerSecond)}px`,
+                top: '0',
+                pointerEvents: 'none',
+              }}
+            >
+              {/* Small downward-pointing triangle on ruler */}
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: '-8px',
+                  width: 0,
+                  height: 0,
+                  borderLeft: '8px solid transparent',
+                  borderRight: '8px solid transparent',
+                  borderTop: '12px solid #ffffff',
+                  filter: 'drop-shadow(0 1px 3px rgba(0, 0, 0, 0.5))',
+                }}
+              />
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

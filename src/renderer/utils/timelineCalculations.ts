@@ -6,6 +6,35 @@
 import { TimelineClip, Track } from '../../types/timeline';
 
 /**
+ * Width of the track label column (left sticky area)
+ * This is the single source of truth for the label width
+ */
+export const TRACK_LABEL_WIDTH = 120;
+
+/**
+ * Convert a time position to pixel position in the timeline content area
+ * This is the SINGLE SOURCE OF TRUTH for time-to-pixel conversion
+ *
+ * @param timeInSeconds - Time position in seconds
+ * @param pixelsPerSecond - Zoom level (pixels per second)
+ * @returns Pixel position relative to content area (after track label)
+ */
+export function timeToPixels(timeInSeconds: number, pixelsPerSecond: number): number {
+  return timeInSeconds * pixelsPerSecond;
+}
+
+/**
+ * Convert pixel position back to time
+ *
+ * @param pixels - Pixel position relative to content area
+ * @param pixelsPerSecond - Zoom level (pixels per second)
+ * @returns Time in seconds
+ */
+export function pixelsToTime(pixels: number, pixelsPerSecond: number): number {
+  return pixels / pixelsPerSecond;
+}
+
+/**
  * Calculate the duration of a clip accounting for trim points
  * Duration = (endTime - startTime) on timeline
  * This should match the usable portion: (originalDuration - trimStart - trimEnd)
@@ -74,4 +103,17 @@ export function detectOverlaps(track: Track): boolean {
   }
 
   return false;
+}
+
+/**
+ * Format time position in MM:SS format
+ * Used for timecode displays and drag indicators
+ *
+ * @param seconds - Time position in seconds
+ * @returns Formatted time string (e.g., "01:23")
+ */
+export function formatTime(seconds: number): string {
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 }
