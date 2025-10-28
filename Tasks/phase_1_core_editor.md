@@ -112,33 +112,33 @@ Set up the Electron + React + TypeScript project with development tooling and ba
 **Goal:** Implement the main application layout structure with placeholder panels for media library, timeline, preview, and controls
 
 **Tasks:**
-- [ ] Read `src/renderer/App.tsx` to understand current structure
-- [ ] Create NEW: `src/renderer/components/Layout.tsx` - Main layout component with CSS Grid:
+- [x] Read `src/renderer/App.tsx` to understand current structure
+- [x] Create NEW: `src/renderer/components/Layout.tsx` - Main layout component with CSS Grid:
   - Header bar (top, full width, 60px height)
   - Media library panel (left, 250px width)
   - Preview panel (center-top, flexible height)
   - Timeline panel (bottom, full width, 200px height)
   - Use CSS Grid for responsive layout
-- [ ] Create NEW: `src/renderer/components/Header.tsx` - Top toolbar:
+- [x] Create NEW: `src/renderer/components/Header.tsx` - Top toolbar:
   - App title "ClipForge"
   - Placeholder for control buttons (Import, Record, Export)
   - Simple background color (#2c3e50 or similar dark theme)
-- [ ] Create NEW: `src/renderer/components/MediaLibrary.tsx` - Left sidebar:
+- [x] Create NEW: `src/renderer/components/MediaLibrary.tsx` - Left sidebar:
   - Panel title "Media Library"
   - Empty state message "No media imported"
   - Background color distinguishing it from main area
-- [ ] Create NEW: `src/renderer/components/Preview.tsx` - Center video preview:
+- [x] Create NEW: `src/renderer/components/Preview.tsx` - Center video preview:
   - Black background (#000000)
   - Centered placeholder text "Preview"
   - Will hold video player in future PR
-- [ ] Create NEW: `src/renderer/components/Timeline.tsx` - Bottom timeline:
+- [x] Create NEW: `src/renderer/components/Timeline.tsx` - Bottom timeline:
   - Panel title "Timeline"
   - Gray background (#34495e or similar)
   - Placeholder for tracks (will add drag-drop later)
-- [ ] Update `src/renderer/App.tsx`:
+- [x] Update `src/renderer/App.tsx`:
   - Import and render Layout component
   - Pass all sub-components to Layout
-- [ ] Create NEW: `src/renderer/styles/global.css` - Global styles:
+- [x] Create NEW: `src/renderer/styles/global.css` - Global styles:
   - Reset margins/padding
   - Set font family (system fonts for macOS)
   - Dark theme color variables
