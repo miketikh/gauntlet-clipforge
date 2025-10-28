@@ -43,6 +43,7 @@
   },
   "dependencies": {
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "@ffprobe-installer/ffprobe": "^2.1.2",
     "@tanstack/react-query": "^5.90.5",
     "@types/fluent-ffmpeg": "^2.1.28",
     "@types/react": "^19.2.2",

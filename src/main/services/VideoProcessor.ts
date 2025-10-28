@@ -1,5 +1,4 @@
 import ffmpeg from '../utils/ffmpegConfig';
-import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
 import * as os from 'os';
 
 /**
@@ -12,7 +11,7 @@ export class VideoProcessor {
    */
   constructor() {
     // FFmpeg path is already configured in ffmpegConfig.ts
-    console.log('VideoProcessor initialized with FFmpeg at:', ffmpegInstaller.path);
+    console.log('VideoProcessor initialized');
   }
 
   /**
