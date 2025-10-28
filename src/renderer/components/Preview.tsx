@@ -3,8 +3,6 @@ import { usePlayerStore } from '../store/playerStore';
 import { useProjectStore } from '../store/projectStore';
 import { useMediaStore } from '../store/mediaStore';
 import { TimelinePlayer } from '../services/TimelinePlayer';
-import { TimelineClip } from '../../types/timeline';
-import { MediaFile } from '../../types/media';
 
 /**
  * Format seconds to MM:SS or HH:MM:SS
@@ -29,10 +27,6 @@ const Preview: React.FC = () => {
   const { currentProject, playheadPosition, setPlayheadPosition } = useProjectStore();
   const { mediaFiles } = useMediaStore();
 
-  // Current clip and media being displayed
-  const [currentClip, setCurrentClip] = React.useState<TimelineClip | null>(null);
-  const [currentMedia, setCurrentMedia] = React.useState<MediaFile | null>(null);
-
   // Initialize TimelinePlayer when project changes
   useEffect(() => {
     if (!currentProject) {
@@ -43,31 +37,27 @@ const Preview: React.FC = () => {
       return;
     }
 
-    // Create TimelinePlayer
-    const player = new TimelinePlayer(currentProject, {
-      onPlayheadUpdate: (position: number) => {
-        if (!isUserSeekingRef.current) {
-          setPlayheadPosition(position);
-        }
-      },
-      onPlaybackEnd: () => {
-        pause();
-      },
-      onClipChange: (clip: TimelineClip | null, media: MediaFile | null) => {
-        setCurrentClip(clip);
-        setCurrentMedia(media);
+    // Check that video element is ready
+    if (!videoRef.current) {
+      console.error('[Preview] Video element not ready for TimelinePlayer');
+      return;
+    }
 
-        // Update video element source
-        if (videoRef.current && media) {
-          const videoPath = media.path;
-          const fileUrl = videoPath.startsWith('file://') ? videoPath : `file://${videoPath}`;
-
-          if (videoRef.current.src !== fileUrl) {
-            videoRef.current.src = fileUrl;
+    // Create TimelinePlayer with the video element
+    const player = new TimelinePlayer(
+      currentProject,
+      {
+        onPlayheadUpdate: (position: number) => {
+          if (!isUserSeekingRef.current) {
+            setPlayheadPosition(position);
           }
-        }
+        },
+        onPlaybackEnd: () => {
+          pause();
+        },
       },
-    });
+      videoRef.current
+    );
 
     timelinePlayerRef.current = player;
 
@@ -106,10 +96,13 @@ const Preview: React.FC = () => {
 
   // Handle playhead scrubbing (when user manually moves playhead)
   const previousPlayheadRef = useRef<number>(playheadPosition);
+
   useEffect(() => {
-    // Only seek if the playhead position changed externally (not from TimelinePlayer)
-    if (Math.abs(playheadPosition - previousPlayheadRef.current) > 0.5) {
-      if (timelinePlayerRef.current && !isPlaying) {
+    // Seek if playhead position changed (enable responsive scrubbing during drag)
+    const positionDelta = Math.abs(playheadPosition - previousPlayheadRef.current);
+
+    if (positionDelta > 0.03) { // ~1 frame at 30fps for smooth scrubbing
+      if (timelinePlayerRef.current && !isPlaying && !isUserSeekingRef.current) {
         isUserSeekingRef.current = true;
         timelinePlayerRef.current.seek(playheadPosition).then(() => {
           isUserSeekingRef.current = false;
@@ -139,24 +132,14 @@ const Preview: React.FC = () => {
     }
   }, [playbackRate]);
 
-  // Sync video element with TimelinePlayer
+  // Update current time display from video element
   useEffect(() => {
     if (!videoRef.current) return;
 
     const video = videoRef.current;
 
-    // Sync play/pause state
-    if (isPlaying) {
-      video.play().catch((error) => {
-        console.error('[Preview] Error playing video:', error);
-      });
-    } else {
-      video.pause();
-    }
-
-    // Update current time display
     const updateTime = () => {
-      if (video && currentClip) {
+      if (video) {
         const videoTime = video.currentTime;
         setCurrentTime(videoTime);
       }
@@ -167,7 +150,7 @@ const Preview: React.FC = () => {
     return () => {
       video.removeEventListener('timeupdate', updateTime);
     };
-  }, [isPlaying, currentClip, setCurrentTime]);
+  }, [setCurrentTime]);
 
   // Handle keyboard shortcuts
   const handleKeyDown = useCallback(
@@ -243,10 +226,10 @@ const Preview: React.FC = () => {
   };
 
   // Calculate duration for display
-  const duration = currentMedia?.duration || 0;
-  const displayTime = currentClip
-    ? currentTime
-    : 0;
+  // Show total timeline duration, not current media duration
+  const duration = currentProject?.duration || 0;
+  // Always show playhead position on timeline, not video element's currentTime
+  const displayTime = playheadPosition;
 
   return (
     <div
@@ -269,28 +252,14 @@ const Preview: React.FC = () => {
           minWidth: 0,
         }}
       >
-        {currentMedia ? (
-          <video
-            ref={videoRef}
-            style={{
-              width: '100%',
-              height: '100%',
-              objectFit: 'contain',
-            }}
-          />
-        ) : (
-          <p
-            style={{
-              color: '#7f8c8d',
-              fontSize: '1.2rem',
-              fontWeight: 300,
-            }}
-          >
-            {currentProject?.tracks[0]?.clips.length === 0
-              ? 'No clips on timeline'
-              : 'No clip at playhead position'}
-          </p>
-        )}
+        <video
+          ref={videoRef}
+          style={{
+            width: '100%',
+            height: '100%',
+            objectFit: 'contain',
+          }}
+        />
       </div>
 
       {/* Playback Controls */}
@@ -307,14 +276,13 @@ const Preview: React.FC = () => {
         {/* Play/Pause Button */}
         <button
           onClick={handlePlayPause}
-          disabled={!currentMedia && !currentProject?.tracks[0]?.clips.length}
           style={{
             padding: '8px 16px',
-            background: (currentMedia || currentProject?.tracks[0]?.clips.length) ? '#3498db' : '#555',
+            background: '#3498db',
             color: 'white',
             border: 'none',
             borderRadius: '4px',
-            cursor: (currentMedia || currentProject?.tracks[0]?.clips.length) ? 'pointer' : 'not-allowed',
+            cursor: 'pointer',
             fontSize: '14px',
             fontWeight: 500,
           }}

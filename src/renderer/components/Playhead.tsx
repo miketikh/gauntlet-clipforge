@@ -10,11 +10,21 @@ interface PlayheadProps {
 
 const Playhead: React.FC<PlayheadProps> = ({ position, pixelsPerSecond, trackCount }) => {
   const [isDragging, setIsDragging] = useState(false);
+  const [visualPosition, setVisualPosition] = useState(position); // Visual position during drag
   const containerRef = useRef<HTMLDivElement>(null);
   const setPlayheadPosition = useProjectStore((state) => state.setPlayheadPosition);
   const currentProject = useProjectStore((state) => state.currentProject);
 
-  const xPosition = timeToPixels(position, pixelsPerSecond);
+  // Sync visual position with store position when not dragging
+  useEffect(() => {
+    if (!isDragging) {
+      setVisualPosition(position);
+    }
+  }, [position, isDragging]);
+
+  // Use visual position during drag, store position otherwise
+  const displayPosition = isDragging ? visualPosition : position;
+  const xPosition = timeToPixels(displayPosition, pixelsPerSecond);
   const trackHeight = 80; // Height per track
   const totalHeight = trackCount * trackHeight + trackCount; // +trackCount for borders
 
@@ -60,10 +70,14 @@ const Playhead: React.FC<PlayheadProps> = ({ position, pixelsPerSecond, trackCou
 
     const handleMouseMove = (e: MouseEvent) => {
       const newPosition = calculatePositionFromMouse(e.clientX);
-      setPlayheadPosition(newPosition);
+      // Update visual position AND store during drag for live preview
+      setVisualPosition(newPosition);
+      setPlayheadPosition(newPosition); // Enable real-time seeking during drag
     };
 
     const handleMouseUp = () => {
+      // Commit visual position to store on mouse up
+      setPlayheadPosition(visualPosition);
       setIsDragging(false);
     };
 
@@ -74,7 +88,7 @@ const Playhead: React.FC<PlayheadProps> = ({ position, pixelsPerSecond, trackCou
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isDragging, pixelsPerSecond, setPlayheadPosition]);
+  }, [isDragging, pixelsPerSecond, setPlayheadPosition, visualPosition]);
 
   return (
     <div
@@ -117,7 +131,7 @@ const Playhead: React.FC<PlayheadProps> = ({ position, pixelsPerSecond, trackCou
               zIndex: 10,
             }}
           >
-            {formatTime(position)}
+            {formatTime(displayPosition)}
           </div>
         )}
 

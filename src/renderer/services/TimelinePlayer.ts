@@ -1,6 +1,11 @@
 /**
  * Timeline Player Service
  * Handles multi-clip playback across the entire timeline with seamless transitions
+ *
+ * Architecture: Event-driven state machine for robust clip transitions
+ * - Uses video element events ('ended', 'timeupdate', 'seeked') instead of RAF polling
+ * - Explicit state machine prevents race conditions
+ * - Separation of concerns: playback logic vs UI updates
  */
 
 import { Project, TimelineClip } from '../../types/timeline';
@@ -8,15 +13,29 @@ import { findClipAtPosition, calculateClipDuration } from '../utils/timelineCalc
 import { useMediaStore } from '../store/mediaStore';
 import { MediaFile } from '../../types/media';
 
+/**
+ * Playback state machine
+ * Prevents re-entrant transitions and race conditions
+ */
+enum PlaybackState {
+  IDLE = 'idle',                    // Not playing
+  LOADING = 'loading',              // Loading a clip
+  PLAYING = 'playing',              // Currently playing a clip
+  TRANSITIONING = 'transitioning',  // Between clips (prevents re-entry)
+  SEEKING = 'seeking'               // User is seeking
+}
+
 export interface TimelinePlayerCallbacks {
   onPlayheadUpdate: (position: number) => void;
   onPlaybackEnd: () => void;
-  onClipChange: (clip: TimelineClip | null, media: MediaFile | null) => void;
 }
 
 export class TimelinePlayer {
   private project: Project;
   private callbacks: TimelinePlayerCallbacks;
+
+  // State machine
+  private playbackState: PlaybackState = PlaybackState.IDLE;
 
   // Playback state
   private isPlaying: boolean = false;
@@ -28,30 +47,50 @@ export class TimelinePlayer {
   private currentClip: TimelineClip | null = null;
   private currentMedia: MediaFile | null = null;
 
-  // Video elements
-  private currentVideo: HTMLVideoElement | null = null;
-  private nextVideo: HTMLVideoElement | null = null;
-  private preloadClip: TimelineClip | null = null;
+  // Video element
+  private videoElement: HTMLVideoElement;
 
   // Playback speed
   private playbackRate: number = 1.0;
 
-  constructor(project: Project, callbacks: TimelinePlayerCallbacks) {
+  constructor(project: Project, callbacks: TimelinePlayerCallbacks, videoElement: HTMLVideoElement) {
     this.project = project;
     this.callbacks = callbacks;
+    this.videoElement = videoElement;
 
-    // Create hidden video elements for playback
-    this.currentVideo = document.createElement('video');
-    this.currentVideo.style.display = 'none';
-    document.body.appendChild(this.currentVideo);
+    // Set volume
+    this.videoElement.volume = 1.0;
 
-    this.nextVideo = document.createElement('video');
-    this.nextVideo.style.display = 'none';
-    document.body.appendChild(this.nextVideo);
+    // Set up event-driven playback control
+    this.setupVideoEventListeners();
+  }
 
-    // Set volume to match main video
-    this.currentVideo.volume = 1.0;
-    this.nextVideo.volume = 0; // Mute preload video
+  /**
+   * Set up event listeners for event-driven playback
+   * This is the core of robust clip transitions
+   */
+  private setupVideoEventListeners(): void {
+    // CRITICAL: Use 'ended' event for clip transitions (not RAF polling)
+    // Browser guarantees this fires exactly once when video completes
+    this.videoElement.addEventListener('ended', () => {
+      console.log('[TimelinePlayer] Video ended event fired');
+      this.handleVideoEnded();
+    });
+
+    // Use 'timeupdate' for accurate position (don't update UI directly - too infrequent)
+    // This serves as ground truth, RAF loop handles smooth visual updates
+    this.videoElement.addEventListener('timeupdate', () => {
+      // Just sync internal position, don't trigger UI update here
+      // RAF loop will handle smooth interpolation
+    });
+
+    // Handle seek completion
+    this.videoElement.addEventListener('seeked', () => {
+      if (this.playbackState === PlaybackState.SEEKING) {
+        console.log('[TimelinePlayer] Seek completed');
+        this.playbackState = PlaybackState.IDLE;
+      }
+    });
   }
 
   /**
@@ -65,19 +104,44 @@ export class TimelinePlayer {
    * Start playback from the current playhead position
    */
   async play(startTime?: number): Promise<void> {
+    console.log('[TimelinePlayer] Play requested, current state:', this.playbackState);
+
     if (startTime !== undefined) {
       this.currentPlayheadPosition = startTime;
     }
 
+    this.isPlaying = true;
+
     const clip = this.getClipAtPosition(this.currentPlayheadPosition);
 
-    if (!clip) {
-      console.warn('[TimelinePlayer] No clip at playhead position, cannot play');
-      return;
+    if (clip) {
+      // Start playing from the current clip
+      this.playbackState = PlaybackState.LOADING;
+      await this.loadAndPlayClip(clip);
+      this.playbackState = PlaybackState.PLAYING;
+
+      // CRITICAL FIX: Wait for video to actually start playing before starting RAF loop
+      // This prevents the RAF loop from reading stale video.currentTime
+      await this.waitForVideoPlaying();
+    } else {
+      // No clip at current position - CRITICAL: Clear stale clip reference
+      this.currentClip = null;
+      this.currentMedia = null;
+      this.videoElement.pause(); // Hide video in empty space
+
+      // Find the next clip ahead
+      const nextClip = this.findNextClipAfter(this.currentPlayheadPosition);
+
+      if (nextClip) {
+        console.log('[TimelinePlayer] No clip at playhead, will play from next clip at', nextClip.startTime);
+        this.playbackState = PlaybackState.PLAYING;
+      } else {
+        // No clips ahead at all - show empty
+        console.log('[TimelinePlayer] No clips on timeline to play');
+        this.playbackState = PlaybackState.PLAYING;
+      }
     }
 
-    this.isPlaying = true;
-    await this.loadAndPlayClip(clip);
     this.startPlaybackLoop();
   }
 
@@ -85,16 +149,16 @@ export class TimelinePlayer {
    * Pause playback
    */
   pause(): void {
+    console.log('[TimelinePlayer] Pause requested');
     this.isPlaying = false;
+    this.playbackState = PlaybackState.IDLE;
 
     if (this.animationFrameId !== null) {
       cancelAnimationFrame(this.animationFrameId);
       this.animationFrameId = null;
     }
 
-    if (this.currentVideo) {
-      this.currentVideo.pause();
-    }
+    this.videoElement.pause();
   }
 
   /**
@@ -121,12 +185,16 @@ export class TimelinePlayer {
         // Load a different clip
         await this.loadAndPlayClip(clip);
         if (!wasPlaying) {
-          this.currentVideo?.pause();
+          this.videoElement.pause();
         }
       }
     } else {
-      // No clip at this position
-      this.callbacks.onClipChange(null, null);
+      // No clip at this position - show black screen
+      this.currentClip = null;
+      this.currentMedia = null;
+      this.videoElement.pause();
+      this.videoElement.removeAttribute('src');
+      this.videoElement.load(); // Reset to black screen
     }
 
     // Update playhead
@@ -143,18 +211,14 @@ export class TimelinePlayer {
    */
   setPlaybackRate(rate: number): void {
     this.playbackRate = rate;
-    if (this.currentVideo) {
-      this.currentVideo.playbackRate = rate;
-    }
+    this.videoElement.playbackRate = rate;
   }
 
   /**
    * Set volume
    */
   setVolume(volume: number): void {
-    if (this.currentVideo) {
-      this.currentVideo.volume = volume;
-    }
+    this.videoElement.volume = volume;
   }
 
   /**
@@ -186,6 +250,21 @@ export class TimelinePlayer {
   }
 
   /**
+   * Find the next clip after a given timeline position
+   */
+  private findNextClipAfter(position: number): TimelineClip | null {
+    const mainTrack = this.project.tracks[0];
+    if (!mainTrack) return null;
+
+    // Find clips that start after the current position
+    const nextClips = mainTrack.clips
+      .filter(clip => clip.startTime > position)
+      .sort((a, b) => a.startTime - b.startTime);
+
+    return nextClips.length > 0 ? nextClips[0] : null;
+  }
+
+  /**
    * Load and play a specific clip
    */
   private async loadAndPlayClip(clip: TimelineClip): Promise<void> {
@@ -202,63 +281,51 @@ export class TimelinePlayer {
 
     this.currentMedia = media;
 
-    // Notify about clip change
-    this.callbacks.onClipChange(clip, media);
-
     // Load video
-    if (this.currentVideo) {
-      const videoPath = media.path;
-      const fileUrl = videoPath.startsWith('file://') ? videoPath : `file://${videoPath}`;
+    const videoPath = media.path;
+    const fileUrl = videoPath.startsWith('file://') ? videoPath : `file://${videoPath}`;
 
-      // Only reload if source changed
-      if (this.currentVideo.src !== fileUrl) {
-        this.currentVideo.src = fileUrl;
-        await new Promise<void>((resolve, reject) => {
-          if (!this.currentVideo) return reject();
+    // Only reload if source changed
+    if (this.videoElement.src !== fileUrl) {
+      this.videoElement.src = fileUrl;
+      await new Promise<void>((resolve, reject) => {
+        const onCanPlay = () => {
+          this.videoElement.removeEventListener('canplay', onCanPlay);
+          this.videoElement.removeEventListener('error', onError);
+          resolve();
+        };
 
-          const onCanPlay = () => {
-            this.currentVideo?.removeEventListener('canplay', onCanPlay);
-            this.currentVideo?.removeEventListener('error', onError);
-            resolve();
-          };
+        const onError = () => {
+          this.videoElement.removeEventListener('canplay', onCanPlay);
+          this.videoElement.removeEventListener('error', onError);
+          reject();
+        };
 
-          const onError = () => {
-            this.currentVideo?.removeEventListener('canplay', onCanPlay);
-            this.currentVideo?.removeEventListener('error', onError);
-            reject();
-          };
-
-          this.currentVideo.addEventListener('canplay', onCanPlay);
-          this.currentVideo.addEventListener('error', onError);
-        });
-      }
-
-      // Seek to the correct position within the clip
-      await this.seekWithinClip(clip, this.currentPlayheadPosition);
-
-      // Set playback rate
-      this.currentVideo.playbackRate = this.playbackRate;
-
-      // Start playing if we should be playing
-      if (this.isPlaying) {
-        try {
-          await this.currentVideo.play();
-        } catch (error) {
-          console.error('[TimelinePlayer] Error playing video:', error);
-        }
-      }
+        this.videoElement.addEventListener('canplay', onCanPlay);
+        this.videoElement.addEventListener('error', onError);
+      });
     }
 
-    // Preload next clip if there is one
-    this.preloadNextClip(clip);
+    // Seek to the correct position within the clip
+    await this.seekWithinClip(clip, this.currentPlayheadPosition);
+
+    // Set playback rate
+    this.videoElement.playbackRate = this.playbackRate;
+
+    // Start playing if we should be playing
+    if (this.isPlaying) {
+      try {
+        await this.videoElement.play();
+      } catch (error) {
+        console.error('[TimelinePlayer] Error playing video:', error);
+      }
+    }
   }
 
   /**
    * Seek within the current clip
    */
   private async seekWithinClip(clip: TimelineClip, playheadPosition: number): Promise<void> {
-    if (!this.currentVideo) return;
-
     // Calculate offset within the clip
     const offsetInClip = playheadPosition - clip.startTime;
     const videoTime = clip.trimStart + offsetInClip;
@@ -269,18 +336,16 @@ export class TimelinePlayer {
       Math.min(videoTime, this.currentMedia!.duration - clip.trimEnd)
     );
 
-    this.currentVideo.currentTime = clampedTime;
+    this.videoElement.currentTime = clampedTime;
 
     // Wait for seek to complete
     await new Promise<void>((resolve) => {
-      if (!this.currentVideo) return resolve();
-
       const onSeeked = () => {
-        this.currentVideo?.removeEventListener('seeked', onSeeked);
+        this.videoElement.removeEventListener('seeked', onSeeked);
         resolve();
       };
 
-      this.currentVideo.addEventListener('seeked', onSeeked);
+      this.videoElement.addEventListener('seeked', onSeeked);
 
       // Fallback timeout
       setTimeout(resolve, 100);
@@ -288,41 +353,120 @@ export class TimelinePlayer {
   }
 
   /**
-   * Preload the next clip for seamless transition
+   * Wait for video to actually start playing
+   * This ensures video.currentTime is accurate before RAF loop reads it
    */
-  private preloadNextClip(currentClip: TimelineClip): void {
-    const nextClip = this.getNextClip(currentClip);
+  private async waitForVideoPlaying(): Promise<void> {
+    return new Promise<void>((resolve) => {
+      // If video is already playing, resolve immediately
+      if (!this.videoElement.paused) {
+        resolve();
+        return;
+      }
+
+      const onPlaying = () => {
+        this.videoElement.removeEventListener('playing', onPlaying);
+        resolve();
+      };
+
+      this.videoElement.addEventListener('playing', onPlaying);
+
+      // Fallback timeout to prevent hanging
+      setTimeout(() => {
+        this.videoElement.removeEventListener('playing', onPlaying);
+        resolve();
+      }, 200);
+    });
+  }
+
+  /**
+   * EVENT HANDLER: Video 'ended' event fired
+   * This is the ROBUST way to handle clip transitions (not RAF polling)
+   */
+  private handleVideoEnded(): void {
+    console.log('[TimelinePlayer] handleVideoEnded, state:', this.playbackState, 'clip:', this.currentClip?.id);
+
+    // Guard: Only transition if we're actively playing
+    if (this.playbackState !== PlaybackState.PLAYING) {
+      console.warn('[TimelinePlayer] Video ended but not in PLAYING state, ignoring');
+      return;
+    }
+
+    // Guard: Must have a current clip
+    if (!this.currentClip) {
+      console.warn('[TimelinePlayer] Video ended but no current clip');
+      return;
+    }
+
+    // Transition to next clip
+    this.transitionToNextClip();
+  }
+
+
+  /**
+   * Transition to the next clip (state-machine controlled)
+   * This method has guards to prevent re-entry and race conditions
+   */
+  private async transitionToNextClip(): Promise<void> {
+    console.log('[TimelinePlayer] transitionToNextClip called');
+
+    // CRITICAL GUARD: Prevent re-entry
+    if (this.playbackState === PlaybackState.TRANSITIONING) {
+      console.warn('[TimelinePlayer] Already transitioning, ignoring duplicate request');
+      return;
+    }
+
+    // Set state to TRANSITIONING to block any other transitions
+    this.playbackState = PlaybackState.TRANSITIONING;
+
+    const nextClip = this.getNextClip(this.currentClip!);
 
     if (!nextClip) {
-      this.preloadClip = null;
+      // End of timeline
+      console.log('[TimelinePlayer] No more clips, ending playback');
+      this.pause();
+      this.callbacks.onPlaybackEnd();
       return;
     }
 
-    // Only preload if we haven't already
-    if (this.preloadClip?.id === nextClip.id) {
-      return;
+    // Calculate gap between clips
+    const gap = nextClip.startTime - this.currentClip!.endTime;
+    console.log('[TimelinePlayer] Gap to next clip:', gap, 'seconds');
+
+    if (gap > 0.1) {
+      // Jump over gap
+      console.log('[TimelinePlayer] Jumping gap to next clip at', nextClip.startTime);
+      this.currentPlayheadPosition = nextClip.startTime;
+      this.callbacks.onPlayheadUpdate(this.currentPlayheadPosition);
     }
 
-    this.preloadClip = nextClip;
-
-    // Get media file
-    const mediaStore = useMediaStore.getState();
-    const media = mediaStore.mediaFiles.find(m => m.id === nextClip.mediaFileId);
-
-    if (!media || !this.nextVideo) return;
-
-    const videoPath = media.path;
-    const fileUrl = videoPath.startsWith('file://') ? videoPath : `file://${videoPath}`;
-
-    // Load the next video
-    this.nextVideo.src = fileUrl;
-    this.nextVideo.currentTime = nextClip.trimStart;
+    // Load and play next clip
+    try {
+      await this.loadAndPlayClip(nextClip);
+      // Successfully loaded and playing
+      this.playbackState = PlaybackState.PLAYING;
+      console.log('[TimelinePlayer] Transition complete, now playing clip:', nextClip.id);
+    } catch (error) {
+      console.error('[TimelinePlayer] Error loading next clip:', error);
+      this.pause();
+      this.callbacks.onPlaybackEnd();
+    }
   }
 
   /**
    * Main playback loop using requestAnimationFrame
+   * SIMPLIFIED: Only handles UI updates and gap advancement
+   * Clip transitions are handled by video 'ended' event (event-driven)
    */
   private startPlaybackLoop(): void {
+    // GUARD: Don't start multiple loops
+    if (this.animationFrameId !== null) {
+      console.warn('[TimelinePlayer] Playback loop already running');
+      return;
+    }
+
+    console.log('[TimelinePlayer] Starting playback loop');
+
     const updateLoop = (timestamp: number) => {
       if (!this.isPlaying) return;
 
@@ -330,49 +474,52 @@ export class TimelinePlayer {
       const deltaTime = this.lastUpdateTime > 0 ? (timestamp - this.lastUpdateTime) / 1000 : 0;
       this.lastUpdateTime = timestamp;
 
-      // Update playhead position based on video currentTime
-      if (this.currentVideo && this.currentClip) {
-        const videoTime = this.currentVideo.currentTime;
+      // Case 1: Playing a clip (video element is active)
+      // Get current position from video element and update UI smoothly at 60 FPS
+      // CRITICAL: Verify there's ACTUALLY a clip at current position, not just a stale reference
+      const clipAtPosition = this.getClipAtPosition(this.currentPlayheadPosition);
+      if (this.currentClip && clipAtPosition) {
+        // Update playhead position from video element
+        const videoTime = this.videoElement.currentTime;
         const clipTime = videoTime - this.currentClip.trimStart;
         const timelineTime = this.currentClip.startTime + clipTime;
 
         this.currentPlayheadPosition = timelineTime;
+        // Update UI at RAF frequency (60 FPS) for smooth motion
+        this.callbacks.onPlayheadUpdate(timelineTime);
+      }
+      // Case 2: No current clip - we're in a gap or empty timeline
+      else if (!this.currentClip) {
+        // Advance playhead at normal speed through empty space
+        const adjustedDelta = deltaTime * this.playbackRate;
+        this.currentPlayheadPosition += adjustedDelta;
+        this.callbacks.onPlayheadUpdate(this.currentPlayheadPosition);
 
-        // Check if we've reached the end of the current clip
-        if (this.currentPlayheadPosition >= this.currentClip.endTime) {
-          // Try to transition to next clip
-          const nextClip = this.getNextClip(this.currentClip);
-
-          if (nextClip) {
-            // Check if there's a gap
-            const gap = nextClip.startTime - this.currentClip.endTime;
-
-            if (gap > 0.1) {
-              // Gap detected - pause playback for MVP
-              console.log('[TimelinePlayer] Gap detected, pausing playback');
-              this.pause();
-              this.currentPlayheadPosition = this.currentClip.endTime;
-              this.callbacks.onPlayheadUpdate(this.currentPlayheadPosition);
-              return;
-            } else {
-              // Seamless transition to next clip
-              this.loadAndPlayClip(nextClip);
-            }
-          } else {
-            // End of timeline
+        // Check if we've reached a clip
+        const nextClip = this.getClipAtPosition(this.currentPlayheadPosition);
+        if (nextClip) {
+          // We've reached a clip - start playing it
+          console.log('[TimelinePlayer] Reached clip at', nextClip.startTime);
+          this.playbackState = PlaybackState.LOADING;
+          this.loadAndPlayClip(nextClip).then(() => {
+            this.playbackState = PlaybackState.PLAYING;
+          }).catch((err) => {
+            console.error('[TimelinePlayer] Error loading clip:', err);
             this.pause();
-            this.callbacks.onPlaybackEnd();
-            return;
-          }
+          });
         } else {
-          // Continue playback, update playhead
-          this.callbacks.onPlayheadUpdate(this.currentPlayheadPosition);
-
-          // Preload next clip if we're close to the end (1 second before)
-          if (this.currentClip.endTime - this.currentPlayheadPosition < 1.0) {
-            if (!this.preloadClip || this.preloadClip.id !== this.getNextClip(this.currentClip)?.id) {
-              this.preloadNextClip(this.currentClip);
+          // Check if we've passed all clips (end of timeline)
+          const anyClipAhead = this.findNextClipAfter(this.currentPlayheadPosition);
+          if (!anyClipAhead) {
+            // No more clips ahead - stop at project duration
+            const projectDuration = this.project.duration || 0;
+            if (this.currentPlayheadPosition >= projectDuration) {
+              console.log('[TimelinePlayer] Reached end of timeline at', projectDuration);
+              this.pause();
+              this.callbacks.onPlaybackEnd();
+              return;
             }
+            // Otherwise, continue playing through empty space until project end
           }
         }
       }
@@ -390,15 +537,5 @@ export class TimelinePlayer {
    */
   destroy(): void {
     this.pause();
-
-    if (this.currentVideo) {
-      document.body.removeChild(this.currentVideo);
-      this.currentVideo = null;
-    }
-
-    if (this.nextVideo) {
-      document.body.removeChild(this.nextVideo);
-      this.nextVideo = null;
-    }
   }
 }
