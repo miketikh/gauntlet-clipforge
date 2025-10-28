@@ -165,34 +165,34 @@ Set up the Electron + React + TypeScript project with development tooling and ba
 
 ---
 
-### PR 1.1.3: FFmpeg Integration & Video Processing Verification
+### PR 1.1.3: FFmpeg Integration & Video Processing Verification [x]
 
 **Goal:** Integrate FFmpeg and verify video processing capabilities work before building features on top
 
 **Tasks:**
-- [ ] Install FFmpeg dependencies:
+- [x] Install FFmpeg dependencies:
   - `fluent-ffmpeg` (FFmpeg wrapper for Node.js)
   - `@ffmpeg-installer/ffmpeg` (bundles FFmpeg binary)
   - `@types/fluent-ffmpeg`
-- [ ] Create NEW: `src/main/services/VideoProcessor.ts` - FFmpeg service class:
+- [x] Create NEW: `src/main/services/VideoProcessor.ts` - FFmpeg service class:
   - `constructor()` - Set FFmpeg path from @ffmpeg-installer
   - `async trimVideo(input, output, startTime, endTime)` - Trim video segment
   - `async concatenateVideos(inputs[], output)` - Stitch multiple videos
   - `async extractThumbnail(videoPath, timestamp, outputPath)` - Generate thumbnail
   - `async getVideoMetadata(videoPath)` - Return duration, resolution, codec info
   - Error handling for FFmpeg failures (reject promises with error messages)
-- [ ] Create NEW: `src/main/utils/ffmpegConfig.ts` - FFmpeg configuration:
+- [x] Create NEW: `src/main/utils/ffmpegConfig.ts` - FFmpeg configuration:
   - Set FFmpeg binary path
   - Set FFprobe binary path
   - Export configured fluent-ffmpeg instance
-- [ ] Create NEW: `test-video-processing.ts` - Test script in project root:
+- [x] Create NEW: `test-video-processing.ts` - Test script in project root:
   - Download or create a sample 10-second MP4 file
   - Test trimming first 5 seconds
   - Test getting metadata
   - Test thumbnail extraction
   - Log results to console
-- [ ] Add test script to package.json: `"test:video"` runs test-video-processing.ts
-- [ ] Document FFmpeg methods in VideoProcessor.ts with JSDoc comments
+- [x] Add test script to package.json: `"test:video"` runs test-video-processing.ts
+- [x] Document FFmpeg methods in VideoProcessor.ts with JSDoc comments
 
 **What to Test:**
 1. Run `npm run test:video` - verify script completes without errors
@@ -226,21 +226,21 @@ Implement media library functionality allowing users to import video files and m
 **Goal:** Set up secure communication channel between renderer and main process for file operations
 
 **Tasks:**
-- [ ] Read `src/main/main.ts` to understand main process setup
-- [ ] Create NEW: `src/main/ipc/handlers.ts` - IPC event handlers:
+- [x] Read `src/main/main.ts` to understand main process setup
+- [x] Create NEW: `src/main/ipc/handlers.ts` - IPC event handlers:
   - `handle('select-file')` - Opens native file dialog, returns selected file path
   - `handle('import-video', filePath)` - Validates video file, extracts metadata, returns media object
   - `handle('generate-thumbnail', videoPath)` - Generates thumbnail, returns base64 data URL
   - Each handler includes try/catch with error responses
-- [ ] Update `src/main/main.ts`:
+- [x] Update `src/main/main.ts`:
   - Import and register IPC handlers after app ready
   - Use `ipcMain.handle()` for async request/response pattern
-- [ ] Create NEW: `src/renderer/utils/ipc.ts` - Renderer-side IPC helpers:
+- [x] Create NEW: `src/renderer/utils/ipc.ts` - Renderer-side IPC helpers:
   - `async selectFile()` - Calls 'select-file' handler
   - `async importVideo(filePath)` - Calls 'import-video' handler
   - `async generateThumbnail(videoPath)` - Calls 'generate-thumbnail' handler
   - Type definitions for request/response shapes
-- [ ] Create NEW: `src/types/media.ts` - Shared type definitions:
+- [x] Create NEW: `src/types/media.ts` - Shared type definitions:
   - `interface MediaFile` - id, path, filename, duration, resolution, thumbnail, fileSize
   - Export types for use in both main and renderer
 
@@ -270,13 +270,13 @@ Implement media library functionality allowing users to import video files and m
 **Goal:** Implement media library panel with import functionality and display of imported clips
 
 **Tasks:**
-- [ ] Read `src/renderer/components/MediaLibrary.tsx` to understand current structure
-- [ ] Install state management: `npm install zustand` (lightweight state manager)
-- [ ] Create NEW: `src/renderer/store/mediaStore.ts` - Zustand store for media:
+- [x] Read `src/renderer/components/MediaLibrary.tsx` to understand current structure
+- [x] Install state management: `npm install zustand` (lightweight state manager)
+- [x] Create NEW: `src/renderer/store/mediaStore.ts` - Zustand store for media:
   - State: `mediaFiles: MediaFile[]`
   - Actions: `addMediaFile(file)`, `removeMediaFile(id)`, `clearMedia()`
   - Persist to localStorage for demo purposes
-- [ ] Update `src/renderer/components/MediaLibrary.tsx`:
+- [x] Update `src/renderer/components/MediaLibrary.tsx`:
   - Add "Import Video" button in panel header
   - Button click calls `selectFile()` then `importVideo()`
   - On successful import, add to mediaStore
@@ -286,14 +286,14 @@ Implement media library functionality allowing users to import video files and m
     - Show duration (formatted as MM:SS)
     - Show resolution (e.g., "1920x1080")
   - Empty state when no media: "Click Import Video to get started"
-- [ ] Create NEW: `src/renderer/components/MediaItem.tsx` - Individual media list item:
+- [x] Create NEW: `src/renderer/components/MediaItem.tsx` - Individual media list item:
   - Props: `mediaFile: MediaFile`
   - Thumbnail on left (80x60px)
   - Metadata stacked on right
   - Hover effect for selection
   - Click handler (will use for drag later)
-- [ ] Add loading state during import process (show spinner or "Importing...")
-- [ ] Add error toast/alert if import fails
+- [x] Add loading state during import process (show spinner or "Importing...")
+- [x] Add error toast/alert if import fails
 
 **What to Test:**
 1. Click "Import Video" - verify file dialog opens
@@ -323,8 +323,8 @@ Implement media library functionality allowing users to import video files and m
 **Goal:** Enable drag-and-drop video file import directly into media library panel
 
 **Tasks:**
-- [ ] Read `src/renderer/components/MediaLibrary.tsx` to see current import implementation
-- [ ] Update `src/renderer/components/MediaLibrary.tsx`:
+- [x] Read `src/renderer/components/MediaLibrary.tsx` to see current import implementation
+- [x] Update `src/renderer/components/MediaLibrary.tsx`:
   - Add drag-and-drop zone overlay (covers panel when dragging)
   - `onDragEnter` - Show drop zone overlay
   - `onDragLeave` - Hide overlay if leaving panel
@@ -333,14 +333,14 @@ Implement media library functionality allowing users to import video files and m
   - Filter to video files only (.mp4, .mov, .webm extensions)
   - Call `importVideo()` for each valid file
   - Show "Drop video files here" message in overlay
-- [ ] Add visual feedback:
+- [x] Add visual feedback:
   - Border highlight when dragging over panel
   - Semi-transparent overlay with drop icon/text
   - Reset state after drop completes
-- [ ] Handle multiple files dropped simultaneously:
+- [x] Handle multiple files dropped simultaneously:
   - Import each file sequentially (avoid parallel FFmpeg processes)
   - Show progress: "Importing 2 of 5 files..."
-- [ ] Add file validation:
+- [x] Add file validation:
   - Check file extension
   - Skip non-video files with console warning
   - Alert user if invalid files were dropped
