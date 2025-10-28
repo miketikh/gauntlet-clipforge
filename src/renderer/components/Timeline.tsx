@@ -36,7 +36,11 @@ const Timeline: React.FC = () => {
   const ZOOM_STEP = 10;
 
   // Calculate timeline duration (minimum 60 seconds for empty projects)
-  const projectDuration = currentProject?.duration || 60;
+  const actualProjectDuration = currentProject?.duration || 0;
+  // Visual timeline extends 60 seconds beyond last clip for easier editing
+  const visualDuration = currentProject
+    ? Math.max(actualProjectDuration + 60, 60)
+    : 60;
 
   // Zoom controls
   const handleZoomIn = () => {
@@ -112,13 +116,13 @@ const Timeline: React.FC = () => {
       const rect = target.getBoundingClientRect();
       const offsetX = e.clientX - rect.left;
       const clickedPosition = offsetX / pixelsPerSecond;
-      const newPosition = Math.max(0, Math.min(clickedPosition, projectDuration));
+      const newPosition = Math.max(0, Math.min(clickedPosition, visualDuration));
       useProjectStore.getState().setPlayheadPosition(newPosition);
     }
 
     setSelectedClipId(null);
     timelineRef.current?.focus();
-  }, [setSelectedClipId, pixelsPerSecond, projectDuration]);
+  }, [setSelectedClipId, pixelsPerSecond, visualDuration]);
 
   return (
     <div
@@ -266,7 +270,7 @@ const Timeline: React.FC = () => {
             }}
           />
           {/* Ruler content */}
-          <TimelineRuler duration={projectDuration} pixelsPerSecond={pixelsPerSecond} />
+          <TimelineRuler duration={visualDuration} pixelsPerSecond={pixelsPerSecond} />
         </div>
 
         {/* Timeline Tracks */}
@@ -276,7 +280,7 @@ const Timeline: React.FC = () => {
               key={track.id}
               track={track}
               zoom={pixelsPerSecond}
-              duration={projectDuration}
+              duration={visualDuration}
               trackIndex={index}
               onDragPositionChange={setDragPosition}
             />
