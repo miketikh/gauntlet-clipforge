@@ -727,13 +727,13 @@ Build the interactive timeline with drag-and-drop clip arrangement, trim handles
 
 ---
 
-### PR 1.4.5: Playhead Scrubbing & Click-to-Seek
+### PR 1.4.5: Playhead Scrubbing & Click-to-Seek [x]
 
 **Goal:** Make playhead interactive for seeking through timeline
 
 **Tasks:**
-- [ ] Read `src/renderer/components/Playhead.tsx` to see current rendering
-- [ ] Update `src/renderer/components/Playhead.tsx`:
+- [x] Read `src/renderer/components/Playhead.tsx` to see current rendering
+- [x] Update `src/renderer/components/Playhead.tsx`:
   - Add draggable handle at top of playhead (triangle or circle)
   - `onMouseDown` on handle - Start drag
   - Attach document `onMouseMove` while dragging:
@@ -741,24 +741,24 @@ Build the interactive timeline with drag-and-drop clip arrangement, trim handles
     - Update playheadPosition in projectStore in real-time
   - Attach document `onMouseUp` - End drag
   - Visual feedback: Change handle color while dragging
-- [ ] Update `src/renderer/components/TimelineRuler.tsx`:
+- [x] Update `src/renderer/components/TimelineRuler.tsx`:
   - Add click handler on ruler
   - Calculate clicked position in seconds
   - Update playheadPosition to clicked position
   - This allows quick seeking by clicking on time ruler
-- [ ] Update `src/renderer/components/Timeline.tsx`:
-  - Add click handler on empty track space
+- [x] Update `src/renderer/components/TimelineTrack.tsx`:
+  - Add click handler on track space
   - Calculate clicked position in seconds
   - Update playheadPosition to clicked position
   - This allows seeking by clicking anywhere on timeline
-- [ ] Add constraints:
+- [x] Add constraints:
   - Playhead cannot go before 0
   - Playhead cannot go beyond project duration
   - Snap playhead to clip boundaries if within 5px (optional, helps accuracy)
-- [ ] Add visual feedback:
-  - Show current time at playhead position (HH:MM:SS)
-  - Highlight playhead during drag
-  - Snap indicator when near clip boundary
+- [x] Add visual feedback:
+  - Show current time at playhead position (MM:SS or HH:MM:SS)
+  - Highlight playhead during drag (lighter red color)
+  - Time tooltip shows during drag
 
 **What to Test:**
 1. Click and drag playhead handle - verify it moves smoothly
@@ -789,19 +789,19 @@ Build the interactive timeline with drag-and-drop clip arrangement, trim handles
 
 Implement real-time video preview with play/pause controls and timeline synchronization.
 
-### PR 1.5.1: Video Player Component & Single Clip Playback
+### PR 1.5.1: Video Player Component & Single Clip Playback [x]
 
 **Goal:** Create video player that can play a single video file
 
 **Tasks:**
-- [ ] Read `src/renderer/components/Preview.tsx` to see current placeholder
-- [ ] Update `src/renderer/components/Preview.tsx`:
+- [x] Read `src/renderer/components/Preview.tsx` to see current placeholder
+- [x] Update `src/renderer/components/Preview.tsx`:
   - Replace placeholder with HTML5 `<video>` element
   - Video element fills preview area (maintain aspect ratio)
   - Black background (letterboxing for non-16:9 videos)
   - Controls: Play/Pause button, current time display, duration display
   - Volume control slider (0-100%)
-- [ ] Create NEW: `src/renderer/store/playerStore.ts` - Zustand store for player:
+- [x] Create NEW: `src/renderer/store/playerStore.ts` - Zustand store for player:
   - State:
     - `isPlaying: boolean`
     - `currentTime: number` (synchronized with video.currentTime)
@@ -809,17 +809,17 @@ Implement real-time video preview with play/pause controls and timeline synchron
     - `playbackRate: number` (1.0 = normal speed)
   - Actions:
     - `play()`, `pause()`, `seek(time)`, `setVolume(level)`, `setPlaybackRate(rate)`
-- [ ] Implement video playback logic:
+- [x] Implement video playback logic:
   - Load video file into <video> element using file:// URL
   - Play/pause button toggles playback
   - Update currentTime in playerStore every 100ms during playback
   - Sync playheadPosition with currentTime (update projectStore)
   - Handle video end (pause at end, reset to start option)
-- [ ] Add playback controls:
+- [x] Add playback controls:
   - Spacebar toggles play/pause
   - Left/Right arrow keys seek backward/forward 5 seconds
   - J/K/L keys for rewind/pause/fast-forward (common in video editors)
-- [ ] Display time indicators:
+- [x] Display time indicators:
   - Current time / Total duration (MM:SS / MM:SS format)
   - Update in real-time during playback
 

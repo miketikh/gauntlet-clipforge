@@ -17,6 +17,7 @@ const createWindow = () => {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
       contextIsolation: false, // Set to false initially for easier IPC (can harden later)
+      webSecurity: false, // Allow loading local video files with file:// protocol
     },
   });
 

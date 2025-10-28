@@ -25,7 +25,6 @@ const Timeline: React.FC = () => {
 
   // Calculate timeline duration (minimum 60 seconds for empty projects)
   const projectDuration = currentProject?.duration || 60;
-  const timelineWidth = projectDuration * pixelsPerSecond;
 
   // Zoom controls
   const handleZoomIn = () => {
@@ -84,10 +83,23 @@ const Timeline: React.FC = () => {
   }, [handleKeyDown]);
 
   // Click on timeline container to focus it (and deselect clips)
-  const handleTimelineClick = useCallback(() => {
+  const handleTimelineClick = useCallback((e: React.MouseEvent) => {
+    // Check if we clicked on the timeline tracks area (not clips, not buttons)
+    const target = e.target as HTMLElement;
+    const isTrackArea = target.classList.contains('timeline-track-area');
+
+    if (isTrackArea) {
+      // Calculate clicked position and seek playhead
+      const rect = target.getBoundingClientRect();
+      const offsetX = e.clientX - rect.left;
+      const clickedPosition = offsetX / pixelsPerSecond;
+      const newPosition = Math.max(0, Math.min(clickedPosition, projectDuration));
+      useProjectStore.getState().setPlayheadPosition(newPosition);
+    }
+
     setSelectedClipId(null);
     timelineRef.current?.focus();
-  }, [setSelectedClipId]);
+  }, [setSelectedClipId, pixelsPerSecond, projectDuration]);
 
   return (
     <div

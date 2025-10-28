@@ -132,6 +132,7 @@ const TimelineClipView: React.FC<TimelineClipViewProps> = ({
 
   return (
     <div
+      data-clip-id={clip.id}
       onClick={handleClick}
       onContextMenu={handleContextMenu}
       style={{

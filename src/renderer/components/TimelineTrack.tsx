@@ -4,6 +4,7 @@ import { Track } from '../../types/timeline';
 import { MediaFile } from '../../types/media';
 import { EditAPI } from '../api/EditAPI';
 import { useMediaStore } from '../store/mediaStore';
+import { useProjectStore } from '../store/projectStore';
 import TimelineClipView from './TimelineClipView';
 
 interface TimelineTrackProps {
@@ -24,6 +25,7 @@ const TimelineTrack: React.FC<TimelineTrackProps> = ({
   const totalWidth = duration * zoom;
   const trackContentRef = useRef<HTMLDivElement>(null);
   const mediaFiles = useMediaStore((state) => state.mediaFiles);
+  const setPlayheadPosition = useProjectStore((state) => state.setPlayheadPosition);
 
   // Setup drop target
   const [{ isOver, canDrop }, drop] = useDrop(() => ({
@@ -67,6 +69,22 @@ const TimelineTrack: React.FC<TimelineTrackProps> = ({
   // Highlight when dragging over
   const dropHighlight = isOver && canDrop ? 'rgba(102, 126, 234, 0.2)' : 'transparent';
 
+  // Handle click on track area to seek playhead
+  const handleTrackClick = (e: React.MouseEvent) => {
+    // Don't handle clicks on clips - they have their own handlers
+    if ((e.target as HTMLElement).closest('[data-clip-id]')) {
+      return;
+    }
+
+    if (!trackContentRef.current) return;
+
+    const rect = trackContentRef.current.getBoundingClientRect();
+    const offsetX = e.clientX - rect.left;
+    const clickedPosition = offsetX / zoom;
+    const newPosition = Math.max(0, Math.min(clickedPosition, duration));
+    setPlayheadPosition(newPosition);
+  };
+
   return (
     <div
       style={{
@@ -103,12 +121,14 @@ const TimelineTrack: React.FC<TimelineTrackProps> = ({
           drop(node);
           trackContentRef.current = node;
         }}
+        onClick={handleTrackClick}
         style={{
           position: 'relative',
           width: `${totalWidth}px`,
           height: '100%',
           background: dropHighlight,
           transition: 'background 0.2s ease',
+          cursor: 'pointer',
         }}
       >
         {/* Background grid lines every 5 seconds */}

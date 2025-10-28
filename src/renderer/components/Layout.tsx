@@ -23,16 +23,16 @@ const Layout: React.FC<LayoutProps> = ({ header, mediaLibrary, preview, timeline
       overflow: 'hidden',
       background: '#1a1a1a',
     }}>
-      <div style={{ gridArea: 'header' }}>
+      <div style={{ gridArea: 'header', overflow: 'hidden' }}>
         {header}
       </div>
-      <div style={{ gridArea: 'sidebar' }}>
+      <div style={{ gridArea: 'sidebar', overflow: 'hidden', minHeight: 0 }}>
         {mediaLibrary}
       </div>
-      <div style={{ gridArea: 'preview' }}>
+      <div style={{ gridArea: 'preview', overflow: 'hidden', minHeight: 0 }}>
         {preview}
       </div>
-      <div style={{ gridArea: 'timeline' }}>
+      <div style={{ gridArea: 'timeline', overflow: 'hidden', minHeight: 0 }}>
         {timeline}
       </div>
     </div>

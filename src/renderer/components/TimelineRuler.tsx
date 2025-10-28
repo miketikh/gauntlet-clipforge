@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useRef } from 'react';
+import { useProjectStore } from '../store/projectStore';
 
 interface TimelineRulerProps {
   duration: number; // Total timeline duration in seconds
@@ -6,6 +7,9 @@ interface TimelineRulerProps {
 }
 
 const TimelineRuler: React.FC<TimelineRulerProps> = ({ duration, pixelsPerSecond }) => {
+  const rulerRef = useRef<HTMLDivElement>(null);
+  const setPlayheadPosition = useProjectStore((state) => state.setPlayheadPosition);
+
   const totalWidth = duration * pixelsPerSecond;
 
   // Generate time markers every 5 seconds
@@ -29,8 +33,23 @@ const TimelineRuler: React.FC<TimelineRulerProps> = ({ duration, pixelsPerSecond
     return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
   };
 
+  // Handle click on ruler to seek
+  const handleRulerClick = (e: React.MouseEvent) => {
+    if (!rulerRef.current) return;
+
+    const rect = rulerRef.current.getBoundingClientRect();
+    const offsetX = e.clientX - rect.left;
+    const clickedPosition = offsetX / pixelsPerSecond;
+
+    // Constrain to valid range
+    const newPosition = Math.max(0, Math.min(clickedPosition, duration));
+    setPlayheadPosition(newPosition);
+  };
+
   return (
     <div
+      ref={rulerRef}
+      onClick={handleRulerClick}
       style={{
         position: 'relative',
         width: `${totalWidth}px`,
@@ -38,6 +57,7 @@ const TimelineRuler: React.FC<TimelineRulerProps> = ({ duration, pixelsPerSecond
         background: '#2c3e50',
         borderBottom: '1px solid #1a1a1a',
         userSelect: 'none',
+        cursor: 'pointer',
       }}
     >
       {/* Major time markers (every 5 seconds) */}
@@ -52,6 +72,7 @@ const TimelineRuler: React.FC<TimelineRulerProps> = ({ duration, pixelsPerSecond
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'flex-start',
+            pointerEvents: 'none',
           }}
         >
           {/* Vertical line */}
@@ -87,6 +108,7 @@ const TimelineRuler: React.FC<TimelineRulerProps> = ({ duration, pixelsPerSecond
             width: '1px',
             height: '8px',
             background: '#546e7a',
+            pointerEvents: 'none',
           }}
         />
       ))}
