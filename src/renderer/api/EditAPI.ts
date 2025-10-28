@@ -26,6 +26,7 @@
 import { useProjectStore } from '../store/projectStore';
 import { useMediaStore } from '../store/mediaStore';
 import { TimelineClip } from '../../types/timeline';
+import { generateThumbnailAtTime } from '../utils/ipc';
 
 export class EditAPI {
   /**
@@ -120,6 +121,9 @@ export class EditAPI {
   /**
    * Trim a clip by adjusting its trim points
    *
+   * CRITICAL: This method adjusts both trim offsets AND timeline position
+   * to ensure the clip visually shrinks on the timeline when trimmed.
+   *
    * @param clipId - ID of the clip to trim
    * @param trimStart - Seconds to trim from start of original media (optional)
    * @param trimEnd - Seconds to trim from end of original media (optional)
@@ -170,14 +174,50 @@ export class EditAPI {
     const newTrimStart = trimStart ?? clip.trimStart;
     const newTrimEnd = trimEnd ?? clip.trimEnd;
 
+    // Minimum clip duration validation (0.5 seconds)
+    const newClipDuration = mediaFile.duration - newTrimStart - newTrimEnd;
+    if (newClipDuration < 0.5) {
+      throw new Error(
+        `Clip duration (${newClipDuration.toFixed(2)}s) must be at least 0.5 seconds`
+      );
+    }
+
     if (newTrimStart + newTrimEnd >= mediaFile.duration) {
       throw new Error(
         `Total trim (${newTrimStart + newTrimEnd}s) would exceed media duration (${mediaFile.duration}s)`
       );
     }
 
+    // CRITICAL FIX: Adjust timeline position when trimming
+    // When trimming from left (trimStart increases), move startTime forward
+    if (trimStart !== undefined && trimStart !== clip.trimStart) {
+      const trimStartDelta = trimStart - clip.trimStart;
+      changes.startTime = clip.startTime + trimStartDelta;
+      // Keep endTime unchanged when trimming from left
+    }
+
+    // When trimming from right (trimEnd increases), move endTime backward
+    if (trimEnd !== undefined && trimEnd !== clip.trimEnd) {
+      const trimEndDelta = trimEnd - clip.trimEnd;
+      changes.endTime = clip.endTime - trimEndDelta;
+      // Keep startTime unchanged when trimming from right
+    }
+
     // Apply changes
     projectStore.updateClip(clipId, changes);
+
+    // Regenerate thumbnail if trimStart changed (showing new first frame)
+    if (trimStart !== undefined && trimStart !== clip.trimStart) {
+      try {
+        console.log('[EditAPI] Regenerating thumbnail at new trimStart:', newTrimStart);
+        const newThumbnail = await generateThumbnailAtTime(mediaFile.path, newTrimStart);
+        projectStore.updateClip(clipId, { thumbnail: newThumbnail });
+        console.log('[EditAPI] Thumbnail updated successfully');
+      } catch (error) {
+        console.error('[EditAPI] Failed to regenerate thumbnail:', error);
+        // Don't throw - thumbnail update is non-critical
+      }
+    }
 
     // Record command in history
     projectStore.addCommand({
@@ -237,6 +277,7 @@ export class EditAPI {
     const rightClip: Partial<TimelineClip> = {
       trimStart: clip.trimStart + splitTime,
       trimEnd: clip.trimEnd,
+      endTime: clip.endTime, // CRITICAL: Preserve original clip's end time boundary
     };
 
     // The new clip was just added, find it by position
@@ -248,6 +289,22 @@ export class EditAPI {
 
     if (newClip) {
       projectStore.updateClip(newClip.id, rightClip);
+
+      // Regenerate thumbnail for the right clip at its new starting position
+      try {
+        const mediaStore = useMediaStore.getState();
+        const mediaFile = mediaStore.mediaFiles.find(f => f.id === clip.mediaFileId);
+        if (mediaFile) {
+          const newTrimStart = clip.trimStart + splitTime;
+          console.log('[EditAPI] Regenerating thumbnail for right clip at trimStart:', newTrimStart);
+          const newThumbnail = await generateThumbnailAtTime(mediaFile.path, newTrimStart);
+          projectStore.updateClip(newClip.id, { thumbnail: newThumbnail });
+          console.log('[EditAPI] Right clip thumbnail updated successfully');
+        }
+      } catch (error) {
+        console.error('[EditAPI] Failed to regenerate thumbnail for right clip:', error);
+        // Don't throw - thumbnail update is non-critical
+      }
     }
 
     // Record command in history

@@ -175,7 +175,8 @@ const Preview: React.FC = () => {
         if (timelinePlayerRef.current) {
           timelinePlayerRef.current.seek(newPosition);
         }
-      } else if (e.code === 'KeyK') {
+      } else if (e.code === 'KeyK' && !e.metaKey && !e.ctrlKey) {
+        // Only trigger on bare 'K' key, not Cmd+K or Ctrl+K (which is used for splitting)
         e.preventDefault();
         if (isPlaying) {
           pause();

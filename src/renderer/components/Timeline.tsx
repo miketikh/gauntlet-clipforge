@@ -15,6 +15,10 @@ const Timeline: React.FC = () => {
   const setSelectedClipId = useProjectStore((state) => state.setSelectedClipId);
 
   // Zoom state (pixelsPerSecond)
+  // This controls how many pixels represent one second on the timeline
+  // Higher values = more zoomed in (timeline is wider)
+  // Lower values = more zoomed out (timeline is narrower)
+  // Default: 50px/s provides a good balance for most editing tasks
   const [pixelsPerSecond, setPixelsPerSecond] = useState(50);
 
   // Ref for timeline container to handle focus
@@ -43,6 +47,9 @@ const Timeline: React.FC = () => {
     : 60;
 
   // Zoom controls
+  // These functions adjust the zoom level for ALL tracks simultaneously
+  // Since we pass the same pixelsPerSecond value to all TimelineTrack components,
+  // both audio and video tracks will always resize in perfect sync
   const handleZoomIn = () => {
     setPixelsPerSecond((prev) => Math.min(prev + ZOOM_STEP, MAX_ZOOM));
   };
@@ -53,7 +60,29 @@ const Timeline: React.FC = () => {
 
   // Handle keyboard events
   const handleKeyDown = useCallback(async (e: KeyboardEvent) => {
-    // Only handle keyboard shortcuts if we have a selected clip
+    // Zoom shortcuts - work globally (no need for selected clip)
+    // Cmd/Ctrl + Plus/Equal - Zoom in
+    if ((e.metaKey || e.ctrlKey) && (e.key === '+' || e.key === '=')) {
+      e.preventDefault();
+      handleZoomIn();
+      return;
+    }
+
+    // Cmd/Ctrl + Minus - Zoom out
+    if ((e.metaKey || e.ctrlKey) && e.key === '-') {
+      e.preventDefault();
+      handleZoomOut();
+      return;
+    }
+
+    // Cmd/Ctrl + 0 - Reset zoom to default (50px/s)
+    if ((e.metaKey || e.ctrlKey) && e.key === '0') {
+      e.preventDefault();
+      setPixelsPerSecond(50);
+      return;
+    }
+
+    // Only handle clip operations if we have a selected clip
     if (!selectedClipId) return;
 
     // Delete/Backspace - Delete selected clip
@@ -88,7 +117,7 @@ const Timeline: React.FC = () => {
         alert(`Failed to split clip: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
     }
-  }, [selectedClipId, playheadPosition]);
+  }, [selectedClipId, playheadPosition, handleZoomIn, handleZoomOut]);
 
   // Add keyboard event listener
   useEffect(() => {
@@ -189,7 +218,24 @@ const Timeline: React.FC = () => {
                 </span>
               </>
             ) : (
-              'Click a clip to select it'
+              <>
+                <span style={{ marginRight: '12px' }}>
+                  <kbd style={{
+                    background: '#34495e',
+                    padding: '2px 6px',
+                    borderRadius: '3px',
+                    fontFamily: 'monospace',
+                  }}>Cmd +/-</kbd> to zoom
+                </span>
+                <span>
+                  <kbd style={{
+                    background: '#34495e',
+                    padding: '2px 6px',
+                    borderRadius: '3px',
+                    fontFamily: 'monospace',
+                  }}>Cmd+0</kbd> reset zoom
+                </span>
+              </>
             )}
           </div>
         </div>

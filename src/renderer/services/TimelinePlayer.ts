@@ -868,8 +868,16 @@ export class TimelinePlayer {
         // Update UI at RAF frequency (60 FPS) for smooth motion
         this.callbacks.onPlayheadUpdate(timelineTime);
 
-        // Boundary detection removed - rely on browser's natural 'ended' event for transitions
-        // This prevents race conditions and timing issues with side-by-side clips
+        // Check if video has reached trim end boundary
+        // Browser's 'ended' event only fires when full source video ends, not at trimEnd
+        if (this.currentMedia) {
+          const maxVideoTime = this.currentMedia.duration - this.currentClip.trimEnd;
+          if (this.videoElement.currentTime >= maxVideoTime) {
+            console.log('[TimelinePlayer] Reached trimEnd boundary, triggering transition');
+            this.handleVideoEnded();
+            // Don't return - let RAF loop continue to next frame for seamless transition
+          }
+        }
       }
       // Case 2: No current clip - we're in a gap or empty timeline (but may have audio playing)
       // Only run gap-handling logic if we're not currently loading a clip (prevents race condition)

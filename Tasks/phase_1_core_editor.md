@@ -605,13 +605,13 @@ Build the interactive timeline with drag-and-drop clip arrangement, trim handles
 
 ---
 
-### PR 1.4.3: Clip Trim Handles & Interactive Trimming
+### PR 1.4.3: Clip Trim Handles & Interactive Trimming [x]
 
 **Goal:** Add adjustable trim handles to clip edges for start/end point trimming
 
 **Tasks:**
-- [ ] Read `src/renderer/components/TimelineClipView.tsx` to see clip rendering
-- [ ] Update `src/renderer/components/TimelineClipView.tsx`:
+- [x] Read `src/renderer/components/TimelineClipView.tsx` to see clip rendering
+- [x] Update `src/renderer/components/TimelineClipView.tsx`:
   - Add state: `isDraggingStart`, `isDraggingEnd`
   - Render trim handles on left and right edges:
     - Small rectangular handles (10px wide, full clip height)
@@ -627,16 +627,24 @@ Build the interactive timeline with drag-and-drop clip arrangement, trim handles
   - Visual feedback during trim:
     - Semi-transparent overlay on trimmed portion
     - Show new duration while dragging
-- [ ] Add validation in trim logic:
+- [x] **CRITICAL FIX** - Update `src/renderer/api/EditAPI.ts` `trimClip` method:
+  - When trimming from left (trimStart increases), update timeline position:
+    - `newStartTime = oldStartTime + (newTrimStart - oldTrimStart)`
+    - Keep `endTime` unchanged
+  - When trimming from right (trimEnd increases), update timeline position:
+    - `newEndTime = oldEndTime - (newTrimEnd - oldTrimEnd)`
+    - Keep `startTime` unchanged
+  - This ensures clip visually shrinks on timeline when trimmed
+  - Current implementation only updates trim offsets without adjusting timeline footprint
+- [x] Add validation in trim logic:
   - Cannot trim past start of media (trimStart >= 0)
   - Cannot trim past end of media (trimEnd <= mediaDuration)
   - Minimum clip duration 0.5 seconds (prevent invisible clips)
-- [ ] Update `src/renderer/api/EditAPI.ts` `trimClip` method:
   - Validate trim values
   - Update clip.trimStart and clip.trimEnd in projectStore
   - Recalculate clip display duration
   - Update timeline layout if clip width changes
-- [ ] Add visual indicators:
+- [x] Add visual indicators:
   - Show trim amount in tooltip (e.g., "-2.5s")
   - Dim trimmed portions of clip
   - Update clip width as trim changes
@@ -651,6 +659,8 @@ Build the interactive timeline with drag-and-drop clip arrangement, trim handles
 7. Try to make clip very small - verify minimum 0.5s enforced
 8. Check projectStore - verify trimStart/trimEnd values updated
 9. Refresh page - verify trim persists
+10. Verify clip width on timeline visually shortens when trimmed (critical - tests timeline position fix)
+11. Play trimmed clip - verify trimmed portions don't play in preview
 
 **Files Changed:**
 - `src/renderer/components/TimelineClipView.tsx` - Add trim handles and drag logic
@@ -780,6 +790,90 @@ Build the interactive timeline with drag-and-drop clip arrangement, trim handles
 - Playhead position is in seconds (convert from pixels using zoom level)
 - Smooth dragging is important for UX (update state frequently)
 - Consider debouncing playhead updates if performance issues arise
+
+---
+
+### PR 1.4.6: Mark In/Out Point Trim (Ripple Delete)
+
+**Goal:** Implement professional NLE-style mark in/out trimming with automatic gap closing (ripple delete)
+
+**Tasks:**
+- [ ] Read `src/renderer/store/projectStore.ts` to understand state structure
+- [ ] Update `src/renderer/store/projectStore.ts`:
+  - Add state: `markIn: number | null` (timeline position in seconds)
+  - Add state: `markOut: number | null` (timeline position in seconds)
+  - Add action: `setMarkIn(position: number | null)` - Set in point at position
+  - Add action: `setMarkOut(position: number | null)` - Set out point at position
+  - Add action: `clearMarks()` - Reset both marks to null
+- [ ] Update `src/renderer/components/Timeline.tsx`:
+  - Add keyboard event handlers:
+    - `I` key → `setMarkIn(playheadPosition)` - Mark in at playhead
+    - `O` key → `setMarkOut(playheadPosition)` - Mark out at playhead
+    - `X` key → `clearMarks()` - Clear both marks
+    - `;` key or `Shift+Delete` → Execute ripple trim (delete marked region + close gap)
+  - Render visual mark indicators:
+    - Mark In: Vertical green line at `markIn` position with "I" label at top
+    - Mark Out: Vertical red line at `markOut` position with "O" label at top
+    - Marked region: Semi-transparent yellow overlay between marks spanning all tracks
+    - Z-index: Below playhead, above clips
+- [ ] Create `src/renderer/api/EditAPI.ts` method `async rippleTrimMarkedRegion()`:
+  - Validate: Both `markIn` and `markOut` exist
+  - Validate: `markIn < markOut`
+  - Find selected clip
+  - Validate: Both marks are within selected clip bounds (startTime to endTime)
+  - Calculate deletion: `deletedDuration = markOut - markIn`
+  - Implementation approach (using existing methods):
+    - Split selected clip at `markIn` → creates clipA (before) and clipB (after)
+    - Split clipB at `markOut` (adjusted for new position) → creates clipB1 (middle) and clipB2 (end)
+    - Delete clipB1 (the marked section)
+    - Call `rippleDeleteGap()` to shift all clips after leftward
+  - Clear marks after successful operation
+- [ ] Create `src/renderer/api/EditAPI.ts` helper method `rippleDeleteGap(trackIndex, gapStart, gapDuration)`:
+  - Find all clips on `trackIndex` where `startTime > gapStart`
+  - For each clip:
+    - `clip.startTime -= gapDuration`
+    - `clip.endTime -= gapDuration`
+  - Update projectStore with modified clips
+  - This "closes the gap" by shifting clips leftward
+- [ ] Add validation and error handling:
+  - If marks are backwards (in > out), show error alert
+  - If no clip selected, show error alert
+  - If marks span multiple clips, show error (out of scope for MVP)
+  - If marks are identical, show error (nothing to delete)
+- [ ] Add visual feedback:
+  - Highlight marked region with yellow overlay while marks are set
+  - Show duration of marked region in tooltip (e.g., "5.2s marked")
+  - Flash animation when ripple trim completes
+
+**What to Test:**
+1. Import video, add to timeline (single clip)
+2. Position playhead at 5 seconds, press `I` - verify green "In" mark appears
+3. Position playhead at 10 seconds, press `O` - verify red "Out" mark appears
+4. Verify yellow highlight overlay between the two marks
+5. Verify overlay shows across both tracks (audio + video)
+6. Press `;` or Shift+Delete - verify middle section (5s-10s) is deleted
+7. Verify clip visually shortened by 5 seconds on timeline
+8. Verify gap is auto-closed (no empty space where deletion occurred)
+9. If other clips exist after, verify they shifted leftward by 5 seconds
+10. Press `X` - verify marks are cleared (green/red lines disappear)
+11. Try marking with out before in - verify error message
+12. Try marking without selecting a clip - verify error message
+13. Play edited clip - verify marked section is gone from playback
+14. Refresh page - verify trim persists (non-destructive)
+
+**Files Changed:**
+- `src/renderer/store/projectStore.ts` - Add markIn/markOut state and actions
+- `src/renderer/components/Timeline.tsx` - Add mark visuals and keyboard shortcuts
+- `src/renderer/api/EditAPI.ts` - Add rippleTrimMarkedRegion() and rippleDeleteGap()
+
+**Notes:**
+- This implements standard NLE workflow (Premiere, Final Cut Pro style)
+- `I` and `O` are industry-standard keys for in/out points
+- Ripple delete auto-closes gaps (professional editing behavior)
+- For MVP, only support marks within a single clip (not across multiple clips)
+- Mark in/out is complementary to edge drag trim (use both workflows)
+- Marks are temporary (cleared after trim or manually with `X`)
+- `;` key is Final Cut Pro standard for ripple delete
 
 ---
 
@@ -1324,12 +1418,12 @@ Mark each phase complete when all PRs are finished and tested:
 - [ ] Phase 1.1: Application Foundation (3 PRs)
 - [ ] Phase 1.2: Media Import & Management (3 PRs)
 - [ ] Phase 1.3: Project Management (2 PRs)
-- [ ] Phase 1.4: Timeline Editor (5 PRs)
+- [ ] Phase 1.4: Timeline Editor (6 PRs)
 - [ ] Phase 1.5: Video Preview & Playback (3 PRs)
 - [ ] Phase 1.6: Basic Export (3 PRs)
 - [ ] Phase 1.7: Recording Features (2 PRs)
 
-**Total: 21 PRs across 7 phases**
+**Total: 22 PRs across 7 phases**
 
 ---
 
@@ -1340,7 +1434,8 @@ Before considering Phase 1 complete, verify these user journeys work end-to-end:
 1. **Import and Edit Journey**:
    - [ ] Import 2+ video files via drag-and-drop
    - [ ] Drag clips onto timeline in sequence
-   - [ ] Trim start/end of clips using handles
+   - [ ] Trim start/end of clips using edge drag handles
+   - [ ] Trim middle section using mark in/out (I/O keys) with ripple delete
    - [ ] Split one clip in the middle
    - [ ] Delete unwanted clip
    - [ ] Preview timeline with playback

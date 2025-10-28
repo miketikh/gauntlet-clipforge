@@ -40,6 +40,9 @@ export interface TimelineClip {
   trimStart: number; // Trim from start of original media (seconds, 0 = no trim)
   trimEnd: number; // Trim from end of original media (seconds, 0 = no trim)
 
+  // Thumbnail showing the first frame of the trimmed clip (generated at trimStart position)
+  thumbnail?: string; // Base64 data URL of thumbnail image
+
   // Audio properties (optional)
   volume?: number; // Volume multiplier (0-1 = quieter, 1 = original, >1 = louder)
   muted?: boolean; // Whether audio is muted

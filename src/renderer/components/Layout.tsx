@@ -8,8 +8,8 @@ interface LayoutProps {
 }
 
 const Layout: React.FC<LayoutProps> = ({ header, mediaLibrary, preview, timeline }) => {
-  // Timeline height state (default 200px)
-  const [timelineHeight, setTimelineHeight] = useState(200);
+  // Timeline height state (default 320px - enough for 2 tracks + controls)
+  const [timelineHeight, setTimelineHeight] = useState(320);
   const [isDragging, setIsDragging] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 

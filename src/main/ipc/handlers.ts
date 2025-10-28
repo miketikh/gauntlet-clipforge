@@ -171,5 +171,53 @@ export function registerIpcHandlers() {
     }
   });
 
+  /**
+   * Handle 'generate-thumbnail-at-time' - Generates thumbnail from video at a specific timestamp
+   * @param videoPath - Path to the video file
+   * @param timestamp - Time in seconds where to extract the thumbnail
+   * Returns: Base64 data URL of the thumbnail
+   */
+  ipcMain.handle('generate-thumbnail-at-time', async (_event, videoPath: string, timestamp: number) => {
+    try {
+      // Validate file exists
+      if (!fs.existsSync(videoPath)) {
+        throw new Error('Video file does not exist');
+      }
+
+      // Check if this is an audio file (shouldn't be called for audio, but handle gracefully)
+      const ext = path.extname(videoPath).toLowerCase();
+      const audioExts = ['.mp3', '.wav', '.aac', '.m4a', '.ogg'];
+      const isAudioFile = audioExts.includes(ext);
+
+      if (isAudioFile) {
+        // Return a placeholder for audio files
+        const placeholderBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+        return `data:image/png;base64,${placeholderBase64}`;
+      }
+
+      // Create temporary output path for thumbnail
+      const tempDir = os.tmpdir();
+      const thumbnailFilename = `thumbnail-${timestamp}-${Date.now()}.png`;
+      const thumbnailPath = path.join(tempDir, thumbnailFilename);
+
+      // Extract thumbnail at specified timestamp
+      await videoProcessor.extractThumbnail(videoPath, timestamp, thumbnailPath);
+
+      // Read thumbnail file and convert to base64
+      const thumbnailBuffer = fs.readFileSync(thumbnailPath);
+      const base64Data = thumbnailBuffer.toString('base64');
+      const dataUrl = `data:image/png;base64,${base64Data}`;
+
+      // Clean up temporary file
+      fs.unlinkSync(thumbnailPath);
+
+      console.log(`Thumbnail generated at ${timestamp}s successfully`);
+      return dataUrl;
+    } catch (error) {
+      console.error('Error in generate-thumbnail-at-time handler:', error);
+      throw new Error(`Failed to generate thumbnail at time: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  });
+
   console.log('IPC handlers registered successfully');
 }

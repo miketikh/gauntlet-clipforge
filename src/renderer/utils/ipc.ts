@@ -48,6 +48,22 @@ export async function generateThumbnail(videoPath: string): Promise<string> {
 }
 
 /**
+ * Generates a thumbnail from a video file at a specific timestamp
+ * @param videoPath - Path to the video file
+ * @param timestamp - Time in seconds where to extract the thumbnail
+ * @returns Base64 data URL of the thumbnail
+ */
+export async function generateThumbnailAtTime(videoPath: string, timestamp: number): Promise<string> {
+  try {
+    const thumbnailDataUrl: string = await ipcRenderer.invoke('generate-thumbnail-at-time', videoPath, timestamp);
+    return thumbnailDataUrl;
+  } catch (error) {
+    console.error('Error generating thumbnail at time:', error);
+    throw error;
+  }
+}
+
+/**
  * Get file path from a File object (for drag-and-drop)
  * In Electron, File objects from drag-and-drop need webUtils.getPathForFile()
  * @param file - File object from drag-and-drop event

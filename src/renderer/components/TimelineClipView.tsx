@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useState, useEffect, useRef } from 'react';
 import { useDrag } from 'react-dnd';
 import { TimelineClip } from '../../types/timeline';
 import { MediaFile, MediaType } from '../../types/media';
@@ -21,10 +21,25 @@ const TimelineClipView: React.FC<TimelineClipViewProps> = ({
   const setSelectedClipId = useProjectStore((state) => state.setSelectedClipId);
   const playheadPosition = useProjectStore((state) => state.playheadPosition);
 
+  // Trim handle state
+  const [isDraggingStart, setIsDraggingStart] = useState(false);
+  const [isDraggingEnd, setIsDraggingEnd] = useState(false);
+  const [tempTrimStart, setTempTrimStart] = useState(clip.trimStart);
+  const [tempTrimEnd, setTempTrimEnd] = useState(clip.trimEnd);
+  const dragStartX = useRef<number>(0);
+  const originalTrimStart = useRef<number>(0);
+  const originalTrimEnd = useRef<number>(0);
+
   const clipDuration = calculateClipDuration(clip);
   const width = clipDuration * zoom;
   const leftPosition = clip.startTime * zoom;
   const isSelected = selectedClipId === clip.id;
+
+  // Reset temp trim values when clip changes
+  useEffect(() => {
+    setTempTrimStart(clip.trimStart);
+    setTempTrimEnd(clip.trimEnd);
+  }, [clip.trimStart, clip.trimEnd]);
 
   // Check if playhead is over this clip
   const isPlayheadOverClip = playheadPosition >= clip.startTime && playheadPosition <= clip.endTime;
@@ -43,6 +58,82 @@ const TimelineClipView: React.FC<TimelineClipViewProps> = ({
     e.stopPropagation();
     setSelectedClipId(clip.id);
   }, [clip.id, setSelectedClipId]);
+
+  // Trim handle mouse down handlers
+  const handleTrimStartMouseDown = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setIsDraggingStart(true);
+    dragStartX.current = e.clientX;
+    originalTrimStart.current = clip.trimStart;
+  }, [clip.trimStart]);
+
+  const handleTrimEndMouseDown = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setIsDraggingEnd(true);
+    dragStartX.current = e.clientX;
+    originalTrimEnd.current = clip.trimEnd;
+  }, [clip.trimEnd]);
+
+  // Handle trim dragging
+  useEffect(() => {
+    if (!isDraggingStart && !isDraggingEnd) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!mediaFile) return;
+
+      const deltaX = e.clientX - dragStartX.current;
+      const deltaTime = deltaX / zoom;
+
+      if (isDraggingStart) {
+        // Trimming from the left (start)
+        const newTrimStart = Math.max(
+          0, // Cannot trim before media start
+          Math.min(
+            originalTrimStart.current + deltaTime,
+            mediaFile.duration - clip.trimEnd - 0.5 // Minimum 0.5s clip duration
+          )
+        );
+        setTempTrimStart(newTrimStart);
+      } else if (isDraggingEnd) {
+        // Trimming from the right (end)
+        const newTrimEnd = Math.max(
+          0, // Cannot trim before media end
+          Math.min(
+            originalTrimEnd.current - deltaTime,
+            mediaFile.duration - clip.trimStart - 0.5 // Minimum 0.5s clip duration
+          )
+        );
+        setTempTrimEnd(newTrimEnd);
+      }
+    };
+
+    const handleMouseUp = async () => {
+      if (isDraggingStart || isDraggingEnd) {
+        try {
+          // Apply the trim to the clip
+          await editAPI.trimClip(clip.id, tempTrimStart, tempTrimEnd);
+        } catch (error) {
+          console.error('Failed to trim clip:', error);
+          alert(`Failed to trim clip: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          // Reset to original values on error
+          setTempTrimStart(clip.trimStart);
+          setTempTrimEnd(clip.trimEnd);
+        }
+      }
+      setIsDraggingStart(false);
+      setIsDraggingEnd(false);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDraggingStart, isDraggingEnd, zoom, clip.id, clip.trimStart, clip.trimEnd, tempTrimStart, tempTrimEnd, mediaFile]);
 
   // Handle context menu (right-click)
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
@@ -146,6 +237,17 @@ const TimelineClipView: React.FC<TimelineClipViewProps> = ({
     ? 'linear-gradient(135deg, #5e35b1 0%, #311b92 100%)' // Purple gradient for audio
     : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'; // Blue/purple gradient for video
 
+  // Calculate display width based on temp trim values during drag
+  const displayTrimStart = isDraggingStart ? tempTrimStart : clip.trimStart;
+  const displayTrimEnd = isDraggingEnd ? tempTrimEnd : clip.trimEnd;
+  const displayDuration = mediaFile ? mediaFile.duration - displayTrimStart - displayTrimEnd : clipDuration;
+  const displayWidth = (isDraggingStart || isDraggingEnd) ? displayDuration * zoom : width;
+
+  // CRITICAL FIX: Adjust left position when trimming from start
+  // When trimStart increases, the clip's left edge should move rightward
+  const trimStartDelta = isDraggingStart ? (tempTrimStart - clip.trimStart) : 0;
+  const displayLeftPosition = leftPosition + (trimStartDelta * zoom);
+
   return (
     <div
       ref={drag}
@@ -154,9 +256,9 @@ const TimelineClipView: React.FC<TimelineClipViewProps> = ({
       onContextMenu={handleContextMenu}
       style={{
         position: 'absolute',
-        left: `${leftPosition}px`,
+        left: `${displayLeftPosition}px`,
         top: '10px',
-        width: `${width}px`,
+        width: `${displayWidth}px`,
         height: '60px',
         background: clipBackground,
         borderRadius: '4px',
@@ -167,10 +269,10 @@ const TimelineClipView: React.FC<TimelineClipViewProps> = ({
         color: '#ffffff',
         fontSize: '0.75rem',
         fontWeight: 500,
-        overflow: 'hidden',
+        overflow: 'visible', // Changed to visible to show trim handles
         cursor: isDragging ? 'grabbing' : 'pointer',
         boxShadow: isSelected ? '0 4px 12px rgba(243, 156, 18, 0.5)' : '0 2px 4px rgba(0, 0, 0, 0.3)',
-        transition: 'transform 0.1s ease, box-shadow 0.1s ease',
+        transition: isDraggingStart || isDraggingEnd ? 'none' : 'transform 0.1s ease, box-shadow 0.1s ease',
         opacity: isDragging ? 0.5 : 1,
       }}
       onMouseEnter={(e) => {
@@ -212,10 +314,10 @@ const TimelineClipView: React.FC<TimelineClipViewProps> = ({
             >
               🎵
             </div>
-          ) : mediaFile?.thumbnail ? (
-            // Show video thumbnail
+          ) : (clip.thumbnail || mediaFile?.thumbnail) ? (
+            // Show clip thumbnail (from trimStart position) or media file thumbnail as fallback
             <img
-              src={mediaFile.thumbnail}
+              src={clip.thumbnail || mediaFile.thumbnail}
               alt=""
               style={{
                 width: '100%',
@@ -277,6 +379,89 @@ const TimelineClipView: React.FC<TimelineClipViewProps> = ({
         >
           Selected
         </div>
+      )}
+
+      {/* Trim handles - only show when selected */}
+      {isSelected && (
+        <>
+          {/* Left trim handle */}
+          <div
+            onMouseDown={handleTrimStartMouseDown}
+            style={{
+              position: 'absolute',
+              left: '0',
+              top: '0',
+              width: '10px',
+              height: '100%',
+              background: isDraggingStart ? '#ffd700' : 'rgba(255, 215, 0, 0.8)',
+              cursor: 'ew-resize',
+              borderTopLeftRadius: '4px',
+              borderBottomLeftRadius: '4px',
+              zIndex: 10,
+              transition: 'background 0.1s',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = '#ffd700';
+            }}
+            onMouseLeave={(e) => {
+              if (!isDraggingStart) {
+                e.currentTarget.style.background = 'rgba(255, 215, 0, 0.8)';
+              }
+            }}
+          />
+
+          {/* Right trim handle */}
+          <div
+            onMouseDown={handleTrimEndMouseDown}
+            style={{
+              position: 'absolute',
+              right: '0',
+              top: '0',
+              width: '10px',
+              height: '100%',
+              background: isDraggingEnd ? '#ffd700' : 'rgba(255, 215, 0, 0.8)',
+              cursor: 'ew-resize',
+              borderTopRightRadius: '4px',
+              borderBottomRightRadius: '4px',
+              zIndex: 10,
+              transition: 'background 0.1s',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = '#ffd700';
+            }}
+            onMouseLeave={(e) => {
+              if (!isDraggingEnd) {
+                e.currentTarget.style.background = 'rgba(255, 215, 0, 0.8)';
+              }
+            }}
+          />
+
+          {/* Trim amount tooltip during drag */}
+          {(isDraggingStart || isDraggingEnd) && (
+            <div
+              style={{
+                position: 'absolute',
+                top: '-30px',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                background: 'rgba(0, 0, 0, 0.9)',
+                color: '#ffffff',
+                padding: '4px 8px',
+                borderRadius: '4px',
+                fontSize: '0.7rem',
+                fontWeight: 600,
+                whiteSpace: 'nowrap',
+                pointerEvents: 'none',
+                zIndex: 1000,
+              }}
+            >
+              {isDraggingStart && `Trim Start: +${tempTrimStart.toFixed(2)}s`}
+              {isDraggingEnd && `Trim End: +${tempTrimEnd.toFixed(2)}s`}
+              <br />
+              Duration: {displayDuration.toFixed(2)}s
+            </div>
+          )}
+        </>
       )}
     </div>
   );
