@@ -5,6 +5,7 @@ import { useMediaStore } from '../store/mediaStore';
 import { useProjectStore } from '../store/projectStore';
 import UnifiedRecordingModal from './UnifiedRecordingModal';
 import ExportDialog from './ExportDialog';
+import { WaveformExtractor } from '../services/WaveformExtractor';
 
 const Header: React.FC = () => {
   const [isImporting, setIsImporting] = useState(false);
@@ -41,6 +42,21 @@ const Header: React.FC = () => {
 
       // Update media file with thumbnail
       mediaFile.thumbnail = thumbnailUrl;
+
+      // Extract waveform data (non-blocking - won't fail import if extraction fails)
+      try {
+        console.log('Extracting waveform...');
+        const waveformExtractor = new WaveformExtractor();
+        // Extract 10000 samples for detailed waveform (like professional DAWs)
+        const waveformData = await waveformExtractor.extract(filePath, { sampleCount: 10000 });
+        waveformExtractor.destroy();
+        mediaFile.waveformData = waveformData;
+        console.log(`Waveform extracted: ${waveformData.length} samples`);
+      } catch (waveformError) {
+        console.warn('Waveform extraction failed (non-critical):', waveformError);
+        // Continue with import even if waveform fails
+      }
+
       console.log('Complete MediaFile object:', mediaFile);
 
       // Add to media store instead of showing alert

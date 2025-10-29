@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useMediaStore } from '../store/mediaStore';
 import MediaItem from './MediaItem';
 import { importVideo, generateThumbnail, getFilePathForDrop } from '../utils/ipc';
+import { WaveformExtractor } from '../services/WaveformExtractor';
 
 const MediaLibrary: React.FC = () => {
   const mediaFiles = useMediaStore((state) => state.mediaFiles);
@@ -94,8 +95,24 @@ const MediaLibrary: React.FC = () => {
         const thumbnailUrl = await generateThumbnail(filePath);
         console.log('Thumbnail generated');
 
-        // Update media file with thumbnail and add to store
+        // Update media file with thumbnail
         mediaFile.thumbnail = thumbnailUrl;
+
+        // Extract waveform data (non-blocking - won't fail import if extraction fails)
+        try {
+          console.log('Extracting waveform...');
+          const waveformExtractor = new WaveformExtractor();
+          // Extract 10000 samples for detailed waveform (like professional DAWs)
+          const waveformData = await waveformExtractor.extract(filePath, { sampleCount: 10000 });
+          waveformExtractor.destroy();
+          mediaFile.waveformData = waveformData;
+          console.log(`Waveform extracted: ${waveformData.length} samples`);
+        } catch (waveformError) {
+          console.warn('Waveform extraction failed (non-critical):', waveformError);
+          // Continue with import even if waveform fails
+        }
+
+        // Add to store
         addMediaFile(mediaFile);
         console.log('Media file added to store');
       } catch (error) {

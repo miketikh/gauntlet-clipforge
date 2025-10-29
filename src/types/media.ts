@@ -2,6 +2,8 @@
  * Shared type definitions for media files
  */
 
+import type { WaveformPeak } from '../renderer/services/WaveformExtractor';
+
 /**
  * Type of media file
  */
@@ -31,8 +33,8 @@ export interface MediaFile {
     codec: string;                   // e.g., "aac", "mp3"
   };
 
-  // NEW: Waveform data for visualization (optional)
-  waveformData?: number[];           // Amplitude samples (0-1 range)
+  // NEW: Waveform data for visualization (min/max pairs like Audacity/DAWs)
+  waveformData?: WaveformPeak[];     // Array of min/max peak pairs (-1 to 1 range)
 
   // NEW: Recording metadata (optional)
   isRecording?: boolean;             // True if this file came from a recording

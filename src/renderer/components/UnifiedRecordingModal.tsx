@@ -18,6 +18,7 @@ import { Z_INDEX } from '../styles/zIndex';
 import { MediaRecorderService } from '../services/MediaRecorderService';
 import { CombinedRecordingService } from '../services/CombinedRecordingService';
 import { WebcamService, WebcamDevice } from '../services/WebcamService';
+import { WaveformExtractor } from '../services/WaveformExtractor';
 import { useMediaStore } from '../store/mediaStore';
 import RecordingTypeCard from './RecordingTypeCard';
 import RecordingProgress from './RecordingProgress';
@@ -450,6 +451,20 @@ const UnifiedRecordingModal: React.FC<UnifiedRecordingModalProps> = ({ isOpen, o
           const mediaFile = await importRecording(filePath, 'webcam');
           console.log('UnifiedRecordingModal: Webcam recording imported:', mediaFile);
 
+          // Extract waveform data (non-blocking - won't fail import if extraction fails)
+          try {
+            console.log('UnifiedRecordingModal: Extracting waveform...');
+            const waveformExtractor = new WaveformExtractor();
+            // Extract 10000 samples for detailed waveform (like professional DAWs)
+            const waveformData = await waveformExtractor.extract(mediaFile.path, { sampleCount: 10000 });
+            waveformExtractor.destroy();
+            mediaFile.waveformData = waveformData;
+            console.log(`UnifiedRecordingModal: Waveform extracted: ${waveformData.length} samples`);
+          } catch (waveformError) {
+            console.warn('UnifiedRecordingModal: Waveform extraction failed (non-critical):', waveformError);
+            // Continue with import even if waveform fails
+          }
+
           // Add to media store
           addMediaFile(mediaFile);
 
@@ -650,6 +665,20 @@ const UnifiedRecordingModal: React.FC<UnifiedRecordingModalProps> = ({ isOpen, o
         const mediaFile = await importRecording(filePath, 'screen');
         console.log('UnifiedRecordingModal: Screen recording imported:', mediaFile);
 
+        // Extract waveform data (non-blocking - won't fail import if extraction fails)
+        try {
+          console.log('UnifiedRecordingModal: Extracting waveform...');
+          const waveformExtractor = new WaveformExtractor();
+          // Extract 10000 samples for detailed waveform (like professional DAWs)
+          const waveformData = await waveformExtractor.extract(mediaFile.path, { sampleCount: 10000 });
+          waveformExtractor.destroy();
+          mediaFile.waveformData = waveformData;
+          console.log(`UnifiedRecordingModal: Waveform extracted: ${waveformData.length} samples`);
+        } catch (waveformError) {
+          console.warn('UnifiedRecordingModal: Waveform extraction failed (non-critical):', waveformError);
+          // Continue with import even if waveform fails
+        }
+
         // Add to media store
         addMediaFile(mediaFile);
 
@@ -721,6 +750,20 @@ const UnifiedRecordingModal: React.FC<UnifiedRecordingModalProps> = ({ isOpen, o
         console.log('UnifiedRecordingModal: Importing composited PiP recording to media library...');
         const compositedMedia = await importRecording(compositedPath, 'pip');
         console.log('UnifiedRecordingModal: Composited PiP recording imported:', compositedMedia);
+
+        // Extract waveform data (non-blocking - won't fail import if extraction fails)
+        try {
+          console.log('UnifiedRecordingModal: Extracting waveform...');
+          const waveformExtractor = new WaveformExtractor();
+          // Extract 10000 samples for detailed waveform (like professional DAWs)
+          const waveformData = await waveformExtractor.extract(compositedMedia.path, { sampleCount: 10000 });
+          waveformExtractor.destroy();
+          compositedMedia.waveformData = waveformData;
+          console.log(`UnifiedRecordingModal: Waveform extracted: ${waveformData.length} samples`);
+        } catch (waveformError) {
+          console.warn('UnifiedRecordingModal: Waveform extraction failed (non-critical):', waveformError);
+          // Continue with import even if waveform fails
+        }
 
         // Add composited file to media store
         addMediaFile(compositedMedia);

@@ -31,6 +31,9 @@ const TimelineClipView: React.FC<TimelineClipViewProps> = ({
   const originalTrimStart = useRef<number>(0);
   const originalTrimEnd = useRef<number>(0);
 
+  // Waveform canvas ref
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
   const clipDuration = calculateClipDuration(clip);
   const width = clipDuration * zoom;
   const leftPosition = clip.startTime * zoom;
@@ -254,6 +257,52 @@ const TimelineClipView: React.FC<TimelineClipViewProps> = ({
   const trimStartDelta = isDraggingStart ? (tempTrimStart - clip.trimStart) : 0;
   const displayLeftPosition = leftPosition + (trimStartDelta * zoom);
 
+  // Draw waveform on canvas
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Get waveform data from media file
+    const waveformData = mediaFile?.waveformData;
+    if (!waveformData || waveformData.length === 0) {
+      // Clear canvas if no waveform data
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      return;
+    }
+
+    // Set canvas dimensions to match clip display size
+    const height = 60; // Fixed height of timeline clips
+    canvas.width = displayWidth;
+    canvas.height = height;
+
+    // Clear canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Set waveform style
+    ctx.fillStyle = 'rgba(52, 152, 219, 0.6)'; // Blue with transparency
+
+    // Calculate waveform drawing parameters
+    const barWidth = canvas.width / waveformData.length;
+    const centerY = height / 2;
+
+    // Draw waveform using min/max algorithm (like Audacity/DAWs)
+    waveformData.forEach((peak, index) => {
+      const x = index * barWidth;
+
+      // Convert normalized values (-1 to 1) to pixel coordinates
+      // min is negative, draws below center; max is positive, draws above center
+      const maxY = centerY - (peak.max * centerY); // Max draws upward
+      const minY = centerY - (peak.min * centerY); // Min draws downward
+      const barHeight = minY - maxY; // Total height from min to max
+
+      // Draw vertical bar from max (top) to min (bottom)
+      ctx.fillRect(x, maxY, Math.max(barWidth, 1), barHeight);
+    });
+  }, [mediaFile?.waveformData, displayWidth]);
+
   return (
     <div
       ref={drag}
@@ -294,6 +343,21 @@ const TimelineClipView: React.FC<TimelineClipViewProps> = ({
         }
       }}
     >
+      {/* Waveform canvas - positioned absolutely over background */}
+      <canvas
+        ref={canvasRef}
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          pointerEvents: 'none', // Don't block interactions
+          opacity: 0.5, // Subtle overlay
+          borderRadius: '4px',
+        }}
+      />
+
       {/* Optional thumbnail preview or audio icon */}
       {width > 80 && (
         <div
