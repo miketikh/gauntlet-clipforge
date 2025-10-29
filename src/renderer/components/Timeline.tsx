@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useDragLayer } from 'react-dnd';
 import { useProjectStore } from '../store/projectStore';
+import { useMediaStore } from '../store/mediaStore';
 import TimelineRuler from './TimelineRuler';
 import TimelineTrack from './TimelineTrack';
 import Playhead from './Playhead';
@@ -14,6 +15,11 @@ const Timeline: React.FC = () => {
   const playheadPosition = useProjectStore((state) => state.playheadPosition);
   const selectedClipId = useProjectStore((state) => state.selectedClipId);
   const setSelectedClipId = useProjectStore((state) => state.setSelectedClipId);
+  const setClipVolume = useProjectStore((state) => state.setClipVolume);
+  const setClipFades = useProjectStore((state) => state.setClipFades);
+
+  // Subscribe to media store
+  const mediaFiles = useMediaStore((state) => state.mediaFiles);
 
   // Zoom state (pixelsPerSecond)
   // This controls how many pixels represent one second on the timeline
@@ -40,6 +46,17 @@ const Timeline: React.FC = () => {
   const MAX_ZOOM = 100;
   const ZOOM_STEP = 10;
 
+  // Find selected clip and its media file
+  const selectedClip = selectedClipId
+    ? currentProject?.tracks
+        .flatMap((track) => track.clips)
+        .find((clip) => clip.id === selectedClipId)
+    : null;
+
+  const selectedMediaFile = selectedClip
+    ? mediaFiles.find((file) => file.id === selectedClip.mediaFileId)
+    : null;
+
   // Calculate timeline duration (minimum 60 seconds for empty projects)
   const actualProjectDuration = currentProject?.duration || 0;
   // Visual timeline extends 60 seconds beyond last clip for easier editing
@@ -58,6 +75,36 @@ const Timeline: React.FC = () => {
   const handleZoomOut = () => {
     setPixelsPerSecond((prev) => Math.max(prev - ZOOM_STEP, MIN_ZOOM));
   };
+
+  // Clip control handlers
+  const handleVolumeChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (!selectedClip) return;
+      const volume = parseFloat(e.target.value);
+      setClipVolume(selectedClip.id, volume);
+    },
+    [selectedClip, setClipVolume]
+  );
+
+  const handleFadeInChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (!selectedClip) return;
+      const fadeIn = parseFloat(e.target.value);
+      const fadeOut = selectedClip.fadeOut ?? 0;
+      setClipFades(selectedClip.id, fadeIn, fadeOut);
+    },
+    [selectedClip, setClipFades]
+  );
+
+  const handleFadeOutChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (!selectedClip) return;
+      const fadeIn = selectedClip.fadeIn ?? 0;
+      const fadeOut = parseFloat(e.target.value);
+      setClipFades(selectedClip.id, fadeIn, fadeOut);
+    },
+    [selectedClip, setClipFades]
+  );
 
   // Handle keyboard events
   const handleKeyDown = useCallback(async (e: KeyboardEvent) => {
@@ -242,6 +289,148 @@ const Timeline: React.FC = () => {
             )}
           </div>
         </div>
+
+        {/* Clip Controls Panel (shown when clip is selected) */}
+        {selectedClip && selectedMediaFile && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '16px',
+              background: '#1f2d3a',
+              padding: '8px 16px',
+              borderRadius: '6px',
+              border: '1px solid #2a3c4d',
+              flex: '1',
+              maxWidth: '500px',
+              marginLeft: '20px',
+            }}
+          >
+            {/* Clip info */}
+            <div style={{ minWidth: '120px', maxWidth: '150px' }}>
+              <div
+                style={{
+                  fontSize: '0.7rem',
+                  color: '#95a5a6',
+                  marginBottom: '2px',
+                }}
+              >
+                Selected Clip
+              </div>
+              <div
+                style={{
+                  fontSize: '0.75rem',
+                  color: '#ffffff',
+                  fontWeight: 600,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+                title={selectedMediaFile.filename}
+              >
+                {selectedMediaFile.filename}
+              </div>
+            </div>
+
+            {/* Volume control */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '120px' }}>
+              <label
+                style={{
+                  fontSize: '0.65rem',
+                  color: '#95a5a6',
+                  fontWeight: 600,
+                }}
+              >
+                Volume
+              </label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  value={selectedClip.volume ?? 1.0}
+                  onChange={handleVolumeChange}
+                  style={{
+                    flex: 1,
+                    cursor: 'pointer',
+                  }}
+                />
+                <span
+                  style={{
+                    fontSize: '0.7rem',
+                    color: '#ffffff',
+                    fontWeight: 600,
+                    minWidth: '35px',
+                    textAlign: 'right',
+                  }}
+                >
+                  {Math.round((selectedClip.volume ?? 1.0) * 100)}%
+                </span>
+              </div>
+            </div>
+
+            {/* Fade In control */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label
+                style={{
+                  fontSize: '0.65rem',
+                  color: '#95a5a6',
+                  fontWeight: 600,
+                }}
+              >
+                Fade In (s)
+              </label>
+              <input
+                type="number"
+                min="0"
+                max="5"
+                step="0.1"
+                value={selectedClip.fadeIn ?? 0}
+                onChange={handleFadeInChange}
+                style={{
+                  width: '70px',
+                  padding: '4px 6px',
+                  borderRadius: '3px',
+                  border: '1px solid #2a3c4d',
+                  background: '#273849',
+                  color: '#ffffff',
+                  fontSize: '0.7rem',
+                }}
+              />
+            </div>
+
+            {/* Fade Out control */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label
+                style={{
+                  fontSize: '0.65rem',
+                  color: '#95a5a6',
+                  fontWeight: 600,
+                }}
+              >
+                Fade Out (s)
+              </label>
+              <input
+                type="number"
+                min="0"
+                max="5"
+                step="0.1"
+                value={selectedClip.fadeOut ?? 0}
+                onChange={handleFadeOutChange}
+                style={{
+                  width: '70px',
+                  padding: '4px 6px',
+                  borderRadius: '3px',
+                  border: '1px solid #2a3c4d',
+                  background: '#273849',
+                  color: '#ffffff',
+                  fontSize: '0.7rem',
+                }}
+              />
+            </div>
+          </div>
+        )}
 
         {/* Zoom Controls */}
         <div

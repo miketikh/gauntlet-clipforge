@@ -159,6 +159,11 @@ const TimelineTrack: React.FC<TimelineTrackProps> = ({
   }
   const trackLabel = `${trackTypeLabel} - ${track.name}`;
 
+  // Handle mute toggle
+  const handleMute = () => {
+    useProjectStore.getState().setTrackMuted(track.id, !(track.muted ?? false));
+  };
+
   // Handle click on track area to seek playhead
   const handleTrackClick = (e: React.MouseEvent) => {
     // Don't handle clicks on clips - they have their own handlers
@@ -196,7 +201,8 @@ const TimelineTrack: React.FC<TimelineTrackProps> = ({
           background: 'linear-gradient(180deg, #1f2d3a 0%, #1a2633 100%)',
           borderRight: '1px solid #2a3c4d',
           display: 'flex',
-          alignItems: 'center',
+          flexDirection: 'column',
+          justifyContent: 'center',
           color: '#a0aec0',
           fontSize: '0.75rem',
           fontWeight: 600,
@@ -204,12 +210,56 @@ const TimelineTrack: React.FC<TimelineTrackProps> = ({
           left: 0,
           zIndex: 1,
           boxShadow: '2px 0 4px rgba(0, 0, 0, 0.1)',
-          whiteSpace: 'nowrap',
-          textOverflow: 'ellipsis',
-          overflow: 'hidden',
+          gap: '8px',
         }}
       >
-        {trackLabel}
+        {/* Track name */}
+        <div
+          style={{
+            whiteSpace: 'nowrap',
+            textOverflow: 'ellipsis',
+            overflow: 'hidden',
+          }}
+        >
+          {trackLabel}
+        </div>
+
+        {/* Control buttons row */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+          }}
+        >
+          {/* Mute button */}
+          <button
+            onClick={handleMute}
+            title={track.muted ? 'Unmute track' : 'Mute track'}
+            style={{
+              background: track.muted ? '#e74c3c' : '#34495e',
+              color: 'white',
+              border: 'none',
+              borderRadius: '3px',
+              padding: '2px 8px',
+              fontSize: '0.65rem',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+            }}
+          >
+            {track.muted ? '🔇' : '🔊'}
+          </button>
+
+          {/* Volume display */}
+          <span
+            style={{
+              fontSize: '0.65rem',
+              color: '#95a5a6',
+            }}
+          >
+            {Math.round((track.volume ?? 1) * 100)}%
+          </span>
+        </div>
       </div>
 
       {/* Track content area */}
