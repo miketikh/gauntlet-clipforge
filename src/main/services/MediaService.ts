@@ -52,24 +52,36 @@ export class MediaService {
       // Get file stats
       const stats = fs.statSync(recordingPath);
 
-      // Generate unique filename with timestamp
+      // Detect file format from extension
+      const fileExtension = path.extname(recordingPath); // e.g., '.mp4' or '.webm'
+      const isWebM = fileExtension === '.webm';
+
+      // Generate unique filename with timestamp, preserving original extension
       const timestamp = Date.now();
-      const filename = `recording_${timestamp}.webm`;
+      const filename = `recording_${timestamp}${fileExtension}`;
       const destinationPath = path.join(this.projectMediaDir, filename);
+
+      console.log(`MediaService: Detected format: ${fileExtension}, isWebM: ${isWebM}`);
 
       // Move recording from temp to project media folder
       console.log(`MediaService: Moving recording to ${destinationPath}`);
       fs.renameSync(recordingPath, destinationPath);
 
-      // Fix WebM metadata by remuxing with FFmpeg
+      // Fix WebM metadata ONLY for WebM files
       // MediaRecorder creates WebM files without duration metadata
-      console.log('MediaService: Fixing WebM metadata...');
-      const tempFixedPath = path.join(app.getPath('temp'), `fixed_${timestamp}.webm`);
-      await this.videoProcessor.fixWebMMetadata(destinationPath, tempFixedPath);
+      // MP4 files don't need this fix
+      if (isWebM) {
+        console.log('MediaService: Fixing WebM metadata...');
+        const tempFixedPath = path.join(app.getPath('temp'), `fixed_${timestamp}.webm`);
+        await this.videoProcessor.fixWebMMetadata(destinationPath, tempFixedPath);
 
-      // Replace original with fixed version
-      fs.unlinkSync(destinationPath);
-      fs.renameSync(tempFixedPath, destinationPath);
+        // Replace original with fixed version
+        fs.unlinkSync(destinationPath);
+        fs.renameSync(tempFixedPath, destinationPath);
+        console.log('MediaService: WebM metadata fixed');
+      } else {
+        console.log('MediaService: Skipping metadata fix for MP4 file');
+      }
 
       // Extract metadata using FFprobe (after fixing metadata)
       console.log('MediaService: Extracting metadata...');

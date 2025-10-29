@@ -299,11 +299,38 @@ const UnifiedRecordingModal: React.FC<UnifiedRecordingModalProps> = ({ isOpen, o
     startWebcamPreview(deviceId);
   };
 
-  const handleAudioDeviceChange = (audioDeviceId: string) => {
+  const handleAudioDeviceChange = async (audioDeviceId: string) => {
     setSelectedAudioDeviceId(audioDeviceId);
+
     // Restart preview with new audio device (pass directly to avoid race condition)
     if (selectedDeviceId) {
-      startWebcamPreview(selectedDeviceId, audioDeviceId);
+      // Check if we're in PiP mode or webcam-only mode
+      if (currentStep === 'configure-pip') {
+        // PiP mode - restart the PiP preview with new audio device
+        try {
+          // Stop existing stream
+          if (streamRef.current) {
+            streamRef.current.getTracks().forEach(track => track.stop());
+          }
+
+          // Get new stream with selected audio device
+          const stream = await webcamServiceRef.current.getWebcamStream(selectedDeviceId, audioDeviceId);
+          streamRef.current = stream;
+
+          // Attach to PiP video element
+          if (pipVideoRef.current) {
+            pipVideoRef.current.srcObject = stream;
+            await pipVideoRef.current.play();
+            console.log('UnifiedRecordingModal: PiP webcam preview restarted with new audio device');
+          }
+        } catch (err) {
+          console.error('UnifiedRecordingModal: Error restarting PiP preview:', err);
+          setError(err instanceof Error ? err.message : 'Failed to change audio device');
+        }
+      } else {
+        // Webcam-only mode - use existing logic
+        startWebcamPreview(selectedDeviceId, audioDeviceId);
+      }
     }
   };
 
@@ -491,12 +518,33 @@ const UnifiedRecordingModal: React.FC<UnifiedRecordingModalProps> = ({ isOpen, o
 
       setWebcamDevices(availableDevices);
 
-      // Select first device by default
+      // Select first video device by default
       const defaultDevice = availableDevices[0].deviceId;
       setSelectedDeviceId(defaultDevice);
 
-      // Start webcam preview
-      const stream = await webcamServiceRef.current.getWebcamStream(defaultDevice);
+      // Get available audio input devices (microphones)
+      // Handle audio separately so microphone errors don't block camera access
+      let defaultAudioDevice: string | undefined = undefined;
+      try {
+        const availableAudioDevices = await webcamServiceRef.current.getAudioInputDevices();
+        console.log(`UnifiedRecordingModal: Found ${availableAudioDevices.length} microphone(s) for PiP`);
+        setAudioDevices(availableAudioDevices);
+
+        // Select default audio device
+        if (availableAudioDevices.length > 0) {
+          defaultAudioDevice = availableAudioDevices[0].deviceId;
+          setSelectedAudioDeviceId(defaultAudioDevice);
+        }
+      } catch (audioErr) {
+        console.error('UnifiedRecordingModal: Error loading audio devices for PiP:', audioErr);
+        // Show warning but don't block camera access
+        const audioError = audioErr instanceof Error ? audioErr.message : 'Failed to access microphone';
+        setError(`Warning: ${audioError}. You can still record video without audio.`);
+        setAudioDevices([]); // Empty array, no microphones available
+      }
+
+      // Start webcam preview with audio
+      const stream = await webcamServiceRef.current.getWebcamStream(defaultDevice, defaultAudioDevice);
       streamRef.current = stream;
 
       // Attach to PiP video element
@@ -625,7 +673,7 @@ const UnifiedRecordingModal: React.FC<UnifiedRecordingModalProps> = ({ isOpen, o
 
         // Stop the combined recorder
         const recordingData = await combinedRecorderRef.current.stopRecording();
-        console.log(`UnifiedRecordingModal: Got combined recording - Screen: ${recordingData.screenBlob.size} bytes, Webcam: ${recordingData.webcamBlob.size} bytes`);
+        console.log(`UnifiedRecordingModal: Got combined recording - Screen: ${recordingData.screenBlob.size} bytes (${recordingData.screenFormat}), Webcam: ${recordingData.webcamBlob.size} bytes (${recordingData.webcamFormat})`);
 
         // Convert blobs to Uint8Arrays for IPC
         const screenArrayBuffer = await recordingData.screenBlob.arrayBuffer();
@@ -634,8 +682,13 @@ const UnifiedRecordingModal: React.FC<UnifiedRecordingModalProps> = ({ isOpen, o
         const webcamArrayBuffer = await recordingData.webcamBlob.arrayBuffer();
         const webcamUint8Array = new Uint8Array(webcamArrayBuffer);
 
-        // Save both temp files via IPC
-        const { screenPath, webcamPath } = await saveCombinedRecordingFiles(screenUint8Array, webcamUint8Array);
+        // Save both temp files via IPC with format information
+        const { screenPath, webcamPath } = await saveCombinedRecordingFiles(
+          screenUint8Array,
+          webcamUint8Array,
+          recordingData.screenFormat,
+          recordingData.webcamFormat
+        );
         console.log(`UnifiedRecordingModal: Screen temp saved to ${screenPath}`);
         console.log(`UnifiedRecordingModal: Webcam temp saved to ${webcamPath}`);
 
@@ -1500,6 +1553,43 @@ const UnifiedRecordingModal: React.FC<UnifiedRecordingModalProps> = ({ isOpen, o
                         }}
                       >
                         {webcamDevices.map((device) => (
+                          <option key={device.deviceId} value={device.deviceId}>
+                            {device.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {/* Microphone Selection */}
+                  {audioDevices.length > 0 && (
+                    <div style={{ marginBottom: '16px' }}>
+                      <label
+                        style={{
+                          display: 'block',
+                          marginBottom: '8px',
+                          fontSize: '0.875rem',
+                          fontWeight: 500,
+                          color: '#cbd5e1',
+                        }}
+                      >
+                        Select Microphone:
+                      </label>
+                      <select
+                        value={selectedAudioDeviceId || ''}
+                        onChange={(e) => handleAudioDeviceChange(e.target.value)}
+                        style={{
+                          width: '100%',
+                          padding: '10px',
+                          backgroundColor: '#0f172a',
+                          color: '#f1f5f9',
+                          border: '1px solid #334155',
+                          borderRadius: '6px',
+                          fontSize: '0.875rem',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {audioDevices.map((device) => (
                           <option key={device.deviceId} value={device.deviceId}>
                             {device.label}
                           </option>

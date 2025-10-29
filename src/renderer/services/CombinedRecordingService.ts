@@ -10,6 +10,8 @@ export interface CombinedRecordingData {
   webcamBlob: Blob;
   pipConfig: PiPConfig;
   duration: number;
+  screenFormat: 'mp4' | 'webm';  // Track actual format used
+  webcamFormat: 'mp4' | 'webm';
 }
 
 export class CombinedRecordingService {
@@ -19,6 +21,73 @@ export class CombinedRecordingService {
   private webcamChunks: Blob[] = [];
   private startTime: number = 0;
   private pipConfig: PiPConfig | null = null;
+  private screenMimeType: string = '';  // Track actual mimeType used
+  private webcamMimeType: string = '';
+
+  /**
+   * Select best MIME type for screen recording (video-only, no audio)
+   * Try MP4 first (more likely to work with hardware encoding), then WebM
+   */
+  private selectScreenMimeType(): string {
+    const mimeTypeCandidates = [
+      // Try MP4 first - hardware accelerated H.264 on most systems
+      'video/mp4;codecs=avc1.42E01E',  // H.264 Baseline
+      'video/mp4',                      // MP4 fallback
+      // WebM options if MP4 not supported
+      'video/webm;codecs=vp9',          // VP9 video only
+      'video/webm;codecs=vp8',          // VP8 video only
+      'video/webm',                     // WebM fallback
+    ];
+
+    for (const mimeType of mimeTypeCandidates) {
+      if (MediaRecorder.isTypeSupported(mimeType)) {
+        console.log(`CombinedRecordingService: Screen MIME type: ${mimeType}`);
+        return mimeType;
+      }
+    }
+
+    console.warn('CombinedRecordingService: No preferred screen MIME types supported, using default');
+    return 'video/mp4';  // Default to MP4
+  }
+
+  /**
+   * Select best MIME type for webcam recording (video + audio)
+   * Try MP4 with audio first, then WebM
+   */
+  private selectWebcamMimeType(): string {
+    const mimeTypeCandidates = [
+      // Try MP4 first - hardware accelerated on most systems
+      'video/mp4;codecs=avc1.42E01E,mp4a.40.2',  // H.264 + AAC
+      'video/mp4',                                // MP4 fallback
+      // WebM options if MP4 not supported
+      'video/webm;codecs=vp9,opus',               // VP9 video + Opus audio
+      'video/webm;codecs=vp8,opus',               // VP8 video + Opus audio
+      'video/webm',                                // WebM fallback
+    ];
+
+    for (const mimeType of mimeTypeCandidates) {
+      if (MediaRecorder.isTypeSupported(mimeType)) {
+        console.log(`CombinedRecordingService: Webcam MIME type: ${mimeType}`);
+        return mimeType;
+      }
+    }
+
+    console.warn('CombinedRecordingService: No preferred webcam MIME types supported, using default');
+    return 'video/mp4';  // Default to MP4
+  }
+
+  /**
+   * Detect format from MIME type string
+   */
+  private getFormatFromMimeType(mimeType: string): 'mp4' | 'webm' {
+    if (mimeType.includes('mp4')) {
+      return 'mp4';
+    } else if (mimeType.includes('webm')) {
+      return 'webm';
+    }
+    // Default to mp4 if unclear
+    return 'mp4';
+  }
 
   /**
    * Start recording both screen and webcam simultaneously
@@ -37,9 +106,16 @@ export class CombinedRecordingService {
       this.screenChunks = [];
       this.webcamChunks = [];
 
-      // Create screen recorder
+      // Select best supported MIME types for each stream
+      // Screen has NO audio, webcam has audio - try MP4 first (more compatible)
+      this.screenMimeType = this.selectScreenMimeType();
+      this.webcamMimeType = this.selectWebcamMimeType();
+
+      console.log(`CombinedRecordingService: Using formats - Screen: ${this.getFormatFromMimeType(this.screenMimeType)}, Webcam: ${this.getFormatFromMimeType(this.webcamMimeType)}`);
+
+      // Create screen recorder (video-only)
       this.screenRecorder = new MediaRecorder(screenStream, {
-        mimeType: 'video/webm;codecs=vp8,opus',
+        mimeType: this.screenMimeType,
       });
 
       this.screenRecorder.ondataavailable = (event) => {
@@ -49,9 +125,9 @@ export class CombinedRecordingService {
         }
       };
 
-      // Create webcam recorder
+      // Create webcam recorder (video + audio)
       this.webcamRecorder = new MediaRecorder(webcamStream, {
-        mimeType: 'video/webm;codecs=vp8,opus',
+        mimeType: this.webcamMimeType,
       });
 
       this.webcamRecorder.ondataavailable = (event) => {
@@ -149,12 +225,16 @@ export class CombinedRecordingService {
     try {
       console.log('CombinedRecordingService: Creating blobs from chunks...');
 
-      // Create blobs from accumulated chunks
-      const screenBlob = new Blob(this.screenChunks, { type: 'video/webm' });
-      const webcamBlob = new Blob(this.webcamChunks, { type: 'video/webm' });
+      // Create blobs with correct MIME types
+      const screenBlob = new Blob(this.screenChunks, { type: this.screenMimeType });
+      const webcamBlob = new Blob(this.webcamChunks, { type: this.webcamMimeType });
 
-      console.log(`CombinedRecordingService: Screen blob size: ${screenBlob.size} bytes`);
-      console.log(`CombinedRecordingService: Webcam blob size: ${webcamBlob.size} bytes`);
+      // Determine file formats
+      const screenFormat = this.getFormatFromMimeType(this.screenMimeType);
+      const webcamFormat = this.getFormatFromMimeType(this.webcamMimeType);
+
+      console.log(`CombinedRecordingService: Screen blob size: ${screenBlob.size} bytes (format: ${screenFormat})`);
+      console.log(`CombinedRecordingService: Webcam blob size: ${webcamBlob.size} bytes (format: ${webcamFormat})`);
 
       if (!this.pipConfig) {
         throw new Error('PiP configuration is missing');
@@ -165,6 +245,8 @@ export class CombinedRecordingService {
         webcamBlob,
         pipConfig: this.pipConfig,
         duration,
+        screenFormat,
+        webcamFormat,
       };
 
       this.cleanup();
@@ -186,6 +268,8 @@ export class CombinedRecordingService {
     this.webcamChunks = [];
     this.pipConfig = null;
     this.startTime = 0;
+    this.screenMimeType = '';
+    this.webcamMimeType = '';
   }
 
   /**

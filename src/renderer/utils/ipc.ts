@@ -236,14 +236,18 @@ export async function stopCombinedRecording(): Promise<{
  * Save both recording blobs to file system
  * @param screenData - Screen recording data as Uint8Array
  * @param webcamData - Webcam recording data as Uint8Array
+ * @param screenFormat - Format of screen recording ('mp4' | 'webm')
+ * @param webcamFormat - Format of webcam recording ('mp4' | 'webm')
  * @returns Paths to both saved files
  */
 export async function saveCombinedRecordingFiles(
   screenData: Uint8Array,
-  webcamData: Uint8Array
+  webcamData: Uint8Array,
+  screenFormat: 'mp4' | 'webm',
+  webcamFormat: 'mp4' | 'webm'
 ): Promise<{ screenPath: string; webcamPath: string }> {
   try {
-    const result = await ipcRenderer.invoke('recording:save-combined-files', screenData, webcamData);
+    const result = await ipcRenderer.invoke('recording:save-combined-files', screenData, webcamData, screenFormat, webcamFormat);
     return result;
   } catch (error) {
     console.error('Error saving combined recording files:', error);

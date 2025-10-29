@@ -422,19 +422,28 @@ export function registerIpcHandlers(mainWindow?: BrowserWindow) {
    * Handle 'recording:save-combined-files' - Save both recording blobs to file system
    * @param screenBuffer - Buffer containing screen recording data
    * @param webcamBuffer - Buffer containing webcam recording data
-   * Returns: Paths to both saved files
+   * @param screenFormat - Format of screen recording ('mp4' | 'webm')
+   * @param webcamFormat - Format of webcam recording ('mp4' | 'webm')
+   * Returns: Paths to both saved files with correct extensions
    */
-  ipcMain.handle('recording:save-combined-files', async (_event, screenBuffer: Buffer, webcamBuffer: Buffer) => {
+  ipcMain.handle('recording:save-combined-files', async (_event, screenBuffer: Buffer, webcamBuffer: Buffer, screenFormat: 'mp4' | 'webm', webcamFormat: 'mp4' | 'webm') => {
     try {
-      console.log(`IPC: Saving combined recording files - Screen: ${screenBuffer.length} bytes, Webcam: ${webcamBuffer.length} bytes`);
+      console.log(`IPC: Saving combined recording files - Screen: ${screenBuffer.length} bytes (${screenFormat}), Webcam: ${webcamBuffer.length} bytes (${webcamFormat})`);
 
       const activeCombinedRecording = recordingService.getActiveCombinedRecording();
       if (!activeCombinedRecording) {
         throw new Error('No active combined recording to save');
       }
 
-      const screenPath = activeCombinedRecording.screenOutputPath;
-      const webcamPath = activeCombinedRecording.webcamOutputPath;
+      // Get base paths and change extensions based on actual format
+      const originalScreenPath = activeCombinedRecording.screenOutputPath;
+      const originalWebcamPath = activeCombinedRecording.webcamOutputPath;
+
+      // Replace .webm extension with correct format
+      const screenPath = originalScreenPath.replace(/\.webm$/, `.${screenFormat}`);
+      const webcamPath = originalWebcamPath.replace(/\.webm$/, `.${webcamFormat}`);
+
+      console.log(`IPC: Updated paths - Screen: ${screenPath}, Webcam: ${webcamPath}`);
 
       // Ensure directory exists
       const dir = path.dirname(screenPath);
@@ -442,7 +451,7 @@ export function registerIpcHandlers(mainWindow?: BrowserWindow) {
         fs.mkdirSync(dir, { recursive: true });
       }
 
-      // Write both buffers to files
+      // Write both buffers to files with correct extensions
       fs.writeFileSync(screenPath, screenBuffer);
       fs.writeFileSync(webcamPath, webcamBuffer);
 
