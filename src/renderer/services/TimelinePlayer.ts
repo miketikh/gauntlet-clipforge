@@ -9,10 +9,13 @@
  */
 
 import { Project, TimelineClip, TrackType } from '../../types/timeline';
-import { findClipAtPosition, calculateClipDuration, calculateProjectDuration } from '../utils/timelineCalculations';
+import { findClipAtPosition, calculateClipDuration, calculateProjectDuration, calculateOffsetInClip, calculateVideoTime, clampToClipBounds } from '../utils/timelineCalculations';
 import { useMediaStore } from '../store/mediaStore';
 import { MediaFile, MediaType } from '../../types/media';
 import { AudioMixer } from './AudioMixer';
+import { buildFileUrl } from '../utils/mediaUtils';
+import { waitForCanPlay, waitForSeeked, waitForPlaying } from '../utils/videoEventWaiters';
+import { calculateAudioSettings } from '../utils/audioSettingsCalculator';
 
 /**
  * Playback state machine
@@ -424,27 +427,12 @@ export class TimelinePlayer {
 
     // Load video
     const videoPath = media.path;
-    const fileUrl = videoPath.startsWith('file://') ? videoPath : `file://${videoPath}`;
+    const fileUrl = buildFileUrl(videoPath);
 
     // Only reload if source changed
     if (this.videoElement.src !== fileUrl) {
       this.videoElement.src = fileUrl;
-      await new Promise<void>((resolve, reject) => {
-        const onCanPlay = () => {
-          this.videoElement.removeEventListener('canplay', onCanPlay);
-          this.videoElement.removeEventListener('error', onError);
-          resolve();
-        };
-
-        const onError = () => {
-          this.videoElement.removeEventListener('canplay', onCanPlay);
-          this.videoElement.removeEventListener('error', onError);
-          reject();
-        };
-
-        this.videoElement.addEventListener('canplay', onCanPlay);
-        this.videoElement.addEventListener('error', onError);
-      });
+      await waitForCanPlay(this.videoElement);
     }
 
     // Seek to the correct position within the clip
@@ -457,22 +445,19 @@ export class TimelinePlayer {
     // Get track for this clip
     const track = this.project.tracks[clip.trackIndex];
 
-    // Calculate effective mute state
-    const isClipMuted = clip.muted ?? false;
-    const isTrackMuted = track.muted ?? false;
-    const effectiveMute = isClipMuted || isTrackMuted;
-
-    // Calculate effective volume
-    const clipVolume = clip.volume ?? 1.0;
-    const trackVolume = track.volume ?? 1.0;
-    const effectiveVolume = clipVolume * trackVolume * this.globalVolume;
+    // Calculate audio settings
+    const audioSettings = calculateAudioSettings(clip, track, this.globalVolume);
 
     // Apply mute to video element (AudioMixer will handle volume)
-    this.videoElement.muted = effectiveMute;
+    this.videoElement.muted = audioSettings.effectiveMute;
 
     console.log('[TimelinePlayer] Audio settings:', {
-      clipVolume, trackVolume, effectiveVolume,
-      clipMuted: isClipMuted, trackMuted: isTrackMuted, effectiveMute
+      clipVolume: audioSettings.clipVolume,
+      trackVolume: audioSettings.trackVolume,
+      effectiveVolume: audioSettings.effectiveVolume,
+      clipMuted: audioSettings.isClipMuted,
+      trackMuted: audioSettings.isTrackMuted,
+      effectiveMute: audioSettings.effectiveMute
     });
 
     // Connect to AudioMixer for Web Audio API mixing
@@ -491,12 +476,12 @@ export class TimelinePlayer {
       } catch (error) {
         console.error('[TimelinePlayer] Error connecting to AudioMixer:', error);
         // Fallback to direct audio without Web Audio API
-        this.videoElement.volume = Math.max(0, Math.min(1, effectiveVolume));
+        this.videoElement.volume = Math.max(0, Math.min(1, audioSettings.effectiveVolume));
       }
     } else {
       // Element already connected to Web Audio API - update volume
       console.log('[TimelinePlayer] Updating volume for clip:', clip.id);
-      const effectiveVol = clipVolume * trackVolume;
+      const effectiveVol = audioSettings.clipVolume * audioSettings.trackVolume;
       this.audioMixer.setSourceVolume(TimelinePlayer.VIDEO_ELEMENT_SOURCE_ID, effectiveVol);
     }
 
@@ -556,7 +541,7 @@ export class TimelinePlayer {
 
       // Build file URL
       const videoPath = media.path;
-      const fileUrl = videoPath.startsWith('file://') ? videoPath : `file://${videoPath}`;
+      const fileUrl = buildFileUrl(videoPath);
 
       // Only preload if source is different (avoid redundant loads)
       if (this.videoElement.src === fileUrl) {
@@ -568,32 +553,8 @@ export class TimelinePlayer {
 
       // Set source and wait for canplay (browser will start buffering)
       this.videoElement.src = fileUrl;
-      await new Promise<void>((resolve, reject) => {
-        const onCanPlay = () => {
-          this.videoElement.removeEventListener('canplay', onCanPlay);
-          this.videoElement.removeEventListener('error', onError);
-          console.log('[TimelinePlayer] Preload complete for:', clip.id);
-          resolve();
-        };
-
-        const onError = (e: Event) => {
-          this.videoElement.removeEventListener('canplay', onCanPlay);
-          this.videoElement.removeEventListener('error', onError);
-          console.error('[TimelinePlayer] Preload error:', e);
-          reject(new Error('Video preload failed'));
-        };
-
-        this.videoElement.addEventListener('canplay', onCanPlay);
-        this.videoElement.addEventListener('error', onError);
-
-        // Timeout fallback (10 seconds)
-        setTimeout(() => {
-          this.videoElement.removeEventListener('canplay', onCanPlay);
-          this.videoElement.removeEventListener('error', onError);
-          console.warn('[TimelinePlayer] Preload timeout for:', clip.id);
-          resolve(); // Resolve anyway to not block playback
-        }, 10000);
-      });
+      await waitForCanPlay(this.videoElement);
+      console.log('[TimelinePlayer] Preload complete for:', clip.id);
     } finally {
       // Always reset preloading flag when done (success or failure)
       this.isPreloading = false;
@@ -619,14 +580,8 @@ export class TimelinePlayer {
       return;
     }
 
-    // Calculate effective mute and volume
-    const isClipMuted = clip.muted ?? false;
-    const isTrackMuted = track.muted ?? false;
-    const effectiveMute = isClipMuted || isTrackMuted;
-
-    const clipVolume = clip.volume ?? 1.0;
-    const trackVolume = track.volume ?? 1.0;
-    const effectiveVolume = clipVolume * trackVolume;
+    // Calculate audio settings (note: globalVolume is not used for direct audio elements)
+    const audioSettings = calculateAudioSettings(clip, track, 1.0);
 
     console.log('[TimelinePlayer] Loading audio clip:', clip.id, media.name);
 
@@ -634,8 +589,8 @@ export class TimelinePlayer {
     let audioElement = this.audioElements.get(clip.id);
     if (!audioElement) {
       audioElement = new Audio();
-      // Add file:// prefix for local files (same pattern as video clips line 389)
-      const fileUrl = media.path.startsWith('file://') ? media.path : `file://${media.path}`;
+      // Add file:// prefix for local files
+      const fileUrl = buildFileUrl(media.path);
       audioElement.src = fileUrl;
       this.audioElements.set(clip.id, audioElement);
 
@@ -652,8 +607,8 @@ export class TimelinePlayer {
     audioElement.playbackRate = this.playbackRate;
 
     // Calculate offset within the clip
-    const offsetInClip = this.currentPlayheadPosition - clip.startTime;
-    const audioTime = clip.trimStart + offsetInClip;
+    const offsetInClip = calculateOffsetInClip(clip, this.currentPlayheadPosition);
+    const audioTime = calculateVideoTime(clip, this.currentPlayheadPosition);
 
     // Set current time in audio
     audioElement.currentTime = Math.max(0, audioTime);
@@ -668,12 +623,12 @@ export class TimelinePlayer {
       } catch (error) {
         console.error('[TimelinePlayer] Error connecting audio to AudioMixer:', error);
         // Fallback to direct audio
-        audioElement.volume = Math.max(0, Math.min(1, effectiveVolume));
-        audioElement.muted = effectiveMute;
+        audioElement.volume = Math.max(0, Math.min(1, audioSettings.effectiveVolume));
+        audioElement.muted = audioSettings.effectiveMute;
       }
     } else {
       // Update volume for already-connected element
-      this.audioMixer.setSourceVolume(clip.id, clipVolume * trackVolume);
+      this.audioMixer.setSourceVolume(clip.id, audioSettings.clipVolume * audioSettings.trackVolume);
     }
 
     // Apply fade in if configured
@@ -713,30 +668,16 @@ export class TimelinePlayer {
    * Seek within the current clip
    */
   private async seekWithinClip(clip: TimelineClip, playheadPosition: number): Promise<void> {
-    // Calculate offset within the clip
-    const offsetInClip = playheadPosition - clip.startTime;
-    const videoTime = clip.trimStart + offsetInClip;
+    // Calculate video time within the clip
+    const videoTime = calculateVideoTime(clip, playheadPosition);
 
     // Clamp to valid range
-    const clampedTime = Math.max(
-      clip.trimStart,
-      Math.min(videoTime, this.currentMedia!.duration - clip.trimEnd)
-    );
+    const clampedTime = clampToClipBounds(videoTime, clip, this.currentMedia!.duration);
 
     this.videoElement.currentTime = clampedTime;
 
     // Wait for seek to complete
-    await new Promise<void>((resolve) => {
-      const onSeeked = () => {
-        this.videoElement.removeEventListener('seeked', onSeeked);
-        resolve();
-      };
-
-      this.videoElement.addEventListener('seeked', onSeeked);
-
-      // Fallback timeout
-      setTimeout(resolve, 100);
-    });
+    await waitForSeeked(this.videoElement);
   }
 
   /**
@@ -744,26 +685,12 @@ export class TimelinePlayer {
    * This ensures video.currentTime is accurate before RAF loop reads it
    */
   private async waitForVideoPlaying(): Promise<void> {
-    return new Promise<void>((resolve) => {
-      // If video is already playing, resolve immediately
-      if (!this.videoElement.paused) {
-        resolve();
-        return;
-      }
+    // If video is already playing, resolve immediately
+    if (!this.videoElement.paused) {
+      return;
+    }
 
-      const onPlaying = () => {
-        this.videoElement.removeEventListener('playing', onPlaying);
-        resolve();
-      };
-
-      this.videoElement.addEventListener('playing', onPlaying);
-
-      // Fallback timeout to prevent hanging
-      setTimeout(() => {
-        this.videoElement.removeEventListener('playing', onPlaying);
-        resolve();
-      }, 200);
-    });
+    await waitForPlaying(this.videoElement);
   }
 
   /**

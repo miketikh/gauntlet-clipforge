@@ -132,3 +132,45 @@ export function formatTime(seconds: number): string {
   const secs = Math.floor(seconds % 60);
   return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 }
+
+/**
+ * Calculate the offset position within a clip from a timeline position
+ *
+ * @param clip - The timeline clip
+ * @param playheadPosition - Current playhead position in seconds
+ * @returns Offset within the clip in seconds
+ */
+export function calculateOffsetInClip(clip: TimelineClip, playheadPosition: number): number {
+  return playheadPosition - clip.startTime;
+}
+
+/**
+ * Calculate the video time from a timeline position, accounting for trim start
+ *
+ * @param clip - The timeline clip
+ * @param playheadPosition - Current playhead position in seconds
+ * @returns Video time in the source media file in seconds
+ */
+export function calculateVideoTime(clip: TimelineClip, playheadPosition: number): number {
+  const offset = calculateOffsetInClip(clip, playheadPosition);
+  return clip.trimStart + offset;
+}
+
+/**
+ * Clamp video time to clip bounds (respecting trim start/end)
+ *
+ * @param videoTime - Video time in the source media file
+ * @param clip - The timeline clip
+ * @param mediaDuration - Duration of the source media file
+ * @returns Clamped video time within valid bounds
+ */
+export function clampToClipBounds(
+  videoTime: number,
+  clip: TimelineClip,
+  mediaDuration: number
+): number {
+  return Math.max(
+    clip.trimStart,
+    Math.min(videoTime, mediaDuration - clip.trimEnd)
+  );
+}
