@@ -178,7 +178,7 @@ export class RecordingService {
   }
 
   /**
-   * Stop the active recording
+   * Stop the active screen recording
    * @returns Output file path
    */
   async stopScreenRecording(): Promise<string> {
@@ -204,6 +204,37 @@ export class RecordingService {
       this.activeRecording = null; // Clear state even on error
       throw new Error(
         `Failed to stop recording: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
+  }
+
+  /**
+   * Stop the active webcam recording
+   * @returns Output file path
+   */
+  async stopWebcamRecording(): Promise<string> {
+    try {
+      if (!this.activeRecording) {
+        throw new Error('No active webcam recording to stop');
+      }
+
+      console.log(`RecordingService: Stopping webcam recording ${this.activeRecording.recordingId}`);
+
+      const outputPath = this.activeRecording.outputPath;
+      const duration = Date.now() - this.activeRecording.startTime.getTime();
+
+      console.log(`RecordingService: Webcam recording duration: ${duration}ms`);
+      console.log(`RecordingService: Webcam recording saved to: ${outputPath}`);
+
+      // Clear active recording state
+      this.activeRecording = null;
+
+      return outputPath;
+    } catch (error) {
+      console.error('RecordingService: Error stopping webcam recording:', error);
+      this.activeRecording = null; // Clear state even on error
+      throw new Error(
+        `Failed to stop webcam recording: ${error instanceof Error ? error.message : 'Unknown error'}`
       );
     }
   }

@@ -119,7 +119,21 @@ export async function startRecording(sourceId: string): Promise<{ recordingId: s
 }
 
 /**
- * Stop the active recording
+ * Start webcam recording
+ * @returns Recording info with recordingId
+ */
+export async function startWebcamRecording(): Promise<{ recordingId: string }> {
+  try {
+    const result = await ipcRenderer.invoke('recording:start-webcam');
+    return result;
+  } catch (error) {
+    console.error('Error starting webcam recording:', error);
+    throw error;
+  }
+}
+
+/**
+ * Stop the active screen recording
  * @returns Output file path
  */
 export async function stopRecording(): Promise<string> {
@@ -128,6 +142,20 @@ export async function stopRecording(): Promise<string> {
     return outputPath;
   } catch (error) {
     console.error('Error stopping recording:', error);
+    throw error;
+  }
+}
+
+/**
+ * Stop the active webcam recording
+ * @returns Output file path
+ */
+export async function stopWebcamRecording(): Promise<string> {
+  try {
+    const outputPath: string = await ipcRenderer.invoke('recording:stop-webcam');
+    return outputPath;
+  } catch (error) {
+    console.error('Error stopping webcam recording:', error);
     throw error;
   }
 }

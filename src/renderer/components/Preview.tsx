@@ -74,7 +74,7 @@ const Preview: React.FC = () => {
         timelinePlayerRef.current = null;
       }
     };
-  }, [!!currentProject]); // Only recreate when project existence changes (null ↔ project), not when clips change
+  }, [currentProject?.id]); // Only recreate when project ID changes, not when project data mutates
 
   // Update timeline player when project data changes
   useEffect(() => {

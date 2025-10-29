@@ -40,20 +40,71 @@ export class WebcamService {
   }
 
   /**
+   * Get list of available audio input devices (microphones)
+   * @returns Array of WebcamDevice objects (reusing interface for audio devices)
+   */
+  async getAudioInputDevices(): Promise<WebcamDevice[]> {
+    try {
+      // First request permission to enumerate devices
+      const tempStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      tempStream.getTracks().forEach(track => track.stop());
+
+      // Now enumerate devices (labels will be available after permission grant)
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const audioDevices = devices.filter(device => device.kind === 'audioinput');
+
+      // Check if any microphones were found
+      if (audioDevices.length === 0) {
+        throw new Error('No microphone devices found. Please connect a microphone and try again.');
+      }
+
+      return audioDevices.map((device, index) => ({
+        deviceId: device.deviceId,
+        label: device.label || `Microphone ${index + 1}`,
+        groupId: device.groupId,
+      }));
+    } catch (error: any) {
+      console.error('WebcamService: Error enumerating audio devices:', error);
+
+      // Handle permission-specific errors
+      if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+        throw new Error('Microphone permission denied. Please enable microphone access in your browser or system settings and try again.');
+      }
+
+      // Handle device not found errors
+      if (error.name === 'NotFoundError') {
+        throw new Error('No microphone found. Please connect a microphone and try again.');
+      }
+
+      // Re-throw if it's already one of our custom errors
+      if (error.message && error.message.includes('No microphone devices found')) {
+        throw error;
+      }
+
+      // Generic error fallback
+      throw new Error(
+        `Failed to access microphone: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
+  }
+
+  /**
    * Request webcam access and return stream
-   * @param deviceId - Optional specific device ID to use
+   * @param videoDeviceId - Optional specific video device ID to use
+   * @param audioDeviceId - Optional specific audio device ID to use
    * @param constraints - Optional video constraints (default: 720p)
    * @returns MediaStream with video and audio tracks
    */
   async getWebcamStream(
-    deviceId?: string,
+    videoDeviceId?: string,
+    audioDeviceId?: string,
     constraints?: MediaStreamConstraints
   ): Promise<MediaStream> {
     try {
       const defaultConstraints: MediaStreamConstraints = {
-        video: deviceId
+        video: videoDeviceId
           ? {
-              deviceId: { exact: deviceId },
+              deviceId: { exact: videoDeviceId },
               width: { ideal: 1280 },
               height: { ideal: 720 },
             }
@@ -61,7 +112,9 @@ export class WebcamService {
               width: { ideal: 1280 },
               height: { ideal: 720 },
             },
-        audio: true, // Include microphone audio
+        audio: audioDeviceId
+          ? { deviceId: { exact: audioDeviceId } } // Explicitly select microphone
+          : true, // Fall back to default microphone
       };
 
       const finalConstraints = constraints || defaultConstraints;

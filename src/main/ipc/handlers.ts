@@ -265,7 +265,23 @@ export function registerIpcHandlers(mainWindow?: BrowserWindow) {
   });
 
   /**
-   * Handle 'recording:stop' - Stop active recording
+   * Handle 'recording:start-webcam' - Start webcam recording
+   * Returns: Recording info with recordingId
+   */
+  ipcMain.handle('recording:start-webcam', async (_event) => {
+    try {
+      console.log('IPC: Starting webcam recording');
+      const result = await recordingService.startWebcamRecording();
+      console.log(`IPC: Webcam recording started with ID ${result.recordingId}`);
+      return result;
+    } catch (error) {
+      console.error('Error in recording:start-webcam handler:', error);
+      throw new Error(`Failed to start webcam recording: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  });
+
+  /**
+   * Handle 'recording:stop' - Stop active screen recording
    * Returns: Output file path
    */
   ipcMain.handle('recording:stop', async () => {
@@ -277,6 +293,22 @@ export function registerIpcHandlers(mainWindow?: BrowserWindow) {
     } catch (error) {
       console.error('Error in recording:stop handler:', error);
       throw new Error(`Failed to stop recording: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  });
+
+  /**
+   * Handle 'recording:stop-webcam' - Stop active webcam recording
+   * Returns: Output file path
+   */
+  ipcMain.handle('recording:stop-webcam', async () => {
+    try {
+      console.log('IPC: Stopping webcam recording...');
+      const outputPath = await recordingService.stopWebcamRecording();
+      console.log(`IPC: Webcam recording stopped, file at ${outputPath}`);
+      return outputPath;
+    } catch (error) {
+      console.error('Error in recording:stop-webcam handler:', error);
+      throw new Error(`Failed to stop webcam recording: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   });
 

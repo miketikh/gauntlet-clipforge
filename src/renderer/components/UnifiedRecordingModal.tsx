@@ -3,7 +3,9 @@ import { Monitor, Video, MonitorPlay, ArrowLeft, X } from 'lucide-react';
 import {
   getDesktopSources,
   startRecording,
+  startWebcamRecording,
   stopRecording,
+  stopWebcamRecording,
   saveRecordingFile,
   importRecording,
   startCombinedRecording,
@@ -19,6 +21,7 @@ import { WebcamService, WebcamDevice } from '../services/WebcamService';
 import { useMediaStore } from '../store/mediaStore';
 import RecordingTypeCard from './RecordingTypeCard';
 import RecordingProgress from './RecordingProgress';
+import { AudioVolumeMeter } from './AudioVolumeMeter';
 
 interface UnifiedRecordingModalProps {
   isOpen: boolean;
@@ -42,6 +45,10 @@ const UnifiedRecordingModal: React.FC<UnifiedRecordingModalProps> = ({ isOpen, o
   const [webcamDevices, setWebcamDevices] = useState<WebcamDevice[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
   const [loadingWebcam, setLoadingWebcam] = useState(false);
+
+  // Audio device state
+  const [audioDevices, setAudioDevices] = useState<WebcamDevice[]>([]);
+  const [selectedAudioDeviceId, setSelectedAudioDeviceId] = useState<string | null>(null);
 
   // PiP state
   const [pipPosition, setPipPosition] = useState<PiPPosition>('bottom-right');
@@ -215,11 +222,30 @@ const UnifiedRecordingModal: React.FC<UnifiedRecordingModalProps> = ({ isOpen, o
 
       setWebcamDevices(availableDevices);
 
+      // Get available audio input devices (microphones)
+      // Handle audio separately so microphone errors don't block camera access
+      try {
+        const availableAudioDevices = await webcamServiceRef.current.getAudioInputDevices();
+        console.log(`UnifiedRecordingModal: Found ${availableAudioDevices.length} microphone(s)`);
+        setAudioDevices(availableAudioDevices);
+
+        // Select default audio device
+        if (availableAudioDevices.length > 0) {
+          setSelectedAudioDeviceId(availableAudioDevices[0].deviceId);
+        }
+      } catch (audioErr) {
+        console.error('UnifiedRecordingModal: Error loading audio devices:', audioErr);
+        // Show warning but don't block camera access
+        const audioError = audioErr instanceof Error ? audioErr.message : 'Failed to access microphone';
+        setError(`Warning: ${audioError}. You can still record video without audio.`);
+        setAudioDevices([]); // Empty array, no microphones available
+      }
+
       // Select first device by default
       const defaultDevice = availableDevices[0].deviceId;
       setSelectedDeviceId(defaultDevice);
 
-      // Start preview with default device
+      // Start preview with default devices (will use video only if no audio device selected)
       await startWebcamPreview(defaultDevice);
 
       setLoadingWebcam(false);
@@ -230,16 +256,31 @@ const UnifiedRecordingModal: React.FC<UnifiedRecordingModalProps> = ({ isOpen, o
     }
   };
 
-  const startWebcamPreview = async (deviceId: string) => {
+  const startWebcamPreview = async (videoDeviceId: string, audioDeviceIdOverride?: string) => {
     try {
       // Stop existing stream
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
       }
 
-      // Get new stream for selected device
-      const stream = await webcamServiceRef.current.getWebcamStream(deviceId);
+      // Use override if provided, otherwise use state (fixes race condition)
+      const audioDeviceId = audioDeviceIdOverride ?? selectedAudioDeviceId;
+
+      // Get new stream for selected devices (video + audio)
+      const stream = await webcamServiceRef.current.getWebcamStream(videoDeviceId, audioDeviceId || undefined);
       streamRef.current = stream;
+
+      // DEBUG: Check audio tracks
+      const audioTracks = stream.getAudioTracks();
+      const videoTracks = stream.getVideoTracks();
+      console.log('UnifiedRecordingModal: Stream audio tracks:', audioTracks.length);
+      console.log('UnifiedRecordingModal: Stream video tracks:', videoTracks.length);
+      audioTracks.forEach((track, index) => {
+        console.log(`  Audio track ${index}: ${track.label}, enabled: ${track.enabled}, muted: ${track.muted}, readyState: ${track.readyState}`);
+      });
+      videoTracks.forEach((track, index) => {
+        console.log(`  Video track ${index}: ${track.label}, enabled: ${track.enabled}, muted: ${track.muted}, readyState: ${track.readyState}`);
+      });
 
       // Attach to video element
       if (videoRef.current) {
@@ -258,6 +299,14 @@ const UnifiedRecordingModal: React.FC<UnifiedRecordingModalProps> = ({ isOpen, o
     startWebcamPreview(deviceId);
   };
 
+  const handleAudioDeviceChange = (audioDeviceId: string) => {
+    setSelectedAudioDeviceId(audioDeviceId);
+    // Restart preview with new audio device (pass directly to avoid race condition)
+    if (selectedDeviceId) {
+      startWebcamPreview(selectedDeviceId, audioDeviceId);
+    }
+  };
+
   const handleStartWebcamRecording = async () => {
     if (!streamRef.current) {
       setError('No camera stream available');
@@ -266,14 +315,78 @@ const UnifiedRecordingModal: React.FC<UnifiedRecordingModalProps> = ({ isOpen, o
 
     try {
       console.log('UnifiedRecordingModal: Starting webcam recording...');
+
+      // Initialize tracking in main process BEFORE starting MediaRecorder
+      await startWebcamRecording();
+      console.log('UnifiedRecordingModal: Webcam recording initialized in main process');
+
       setCurrentStep('recording');
       setRecordingState('recording');
       setElapsedTime(0);
 
-      // Create MediaRecorder with the webcam stream
+      // Test codec support and select best MIME type (research-backed fallback chain)
+      console.log('UnifiedRecordingModal: Testing codec support...');
+      const mimeTypeCandidates = [
+        'video/webm;codecs=vp9,opus',  // Best quality, modern
+        'video/webm;codecs=vp8,opus',  // Good quality, widely supported
+        'video/webm',                   // Browser chooses codecs (most compatible)
+      ];
+
+      let selectedMimeType = '';
+      for (const mimeType of mimeTypeCandidates) {
+        const isSupported = MediaRecorder.isTypeSupported(mimeType);
+        console.log(`  ${mimeType}: ${isSupported ? '✓ SUPPORTED' : '✗ not supported'}`);
+        if (isSupported && !selectedMimeType) {
+          selectedMimeType = mimeType;
+        }
+      }
+
+      if (!selectedMimeType) {
+        console.warn('⚠️ WARNING: No preferred MIME types supported, using browser default');
+        selectedMimeType = 'video/webm';
+      }
+
+      console.log(`UnifiedRecordingModal: Using MIME type: ${selectedMimeType}`);
+
+      // Validate audio tracks before creating MediaRecorder
+      const audioTracks = streamRef.current.getAudioTracks();
+      const videoTracks = streamRef.current.getVideoTracks();
+
+      console.log(`UnifiedRecordingModal: Pre-recording validation - ${audioTracks.length} audio tracks, ${videoTracks.length} video tracks`);
+
+      if (audioTracks.length === 0) {
+        console.warn('⚠️ WARNING: No audio tracks in stream before recording');
+        // Don't block recording, but warn user
+        if (selectedAudioDeviceId) {
+          setError('Warning: No audio detected. Recording will be video only.');
+        }
+      } else {
+        // Ensure audio tracks are enabled
+        audioTracks.forEach((track, index) => {
+          if (!track.enabled) {
+            console.log(`Enabling disabled audio track ${index}`);
+            track.enabled = true;
+          }
+          console.log(`Audio track ${index}: ${track.label}, enabled: ${track.enabled}, muted: ${track.muted}, readyState: ${track.readyState}`);
+        });
+      }
+
+      // Create MediaRecorder with selected MIME type
       const mediaRecorder = new MediaRecorder(streamRef.current, {
-        mimeType: 'video/webm;codecs=vp8,opus',
+        mimeType: selectedMimeType,
       });
+
+      // DEBUG: Verify MediaRecorder has audio tracks
+      const recorderStream = mediaRecorder.stream;
+      const recorderAudioTracks = recorderStream.getAudioTracks();
+      const recorderVideoTracks = recorderStream.getVideoTracks();
+      console.log('UnifiedRecordingModal: MediaRecorder audio tracks:', recorderAudioTracks.length);
+      console.log('UnifiedRecordingModal: MediaRecorder video tracks:', recorderVideoTracks.length);
+      if (recorderAudioTracks.length === 0) {
+        console.warn('⚠️ WARNING: MediaRecorder has NO AUDIO TRACKS! Recording will be silent.');
+      } else {
+        console.log(`✓ MediaRecorder has ${recorderAudioTracks.length} audio track(s) - recording should have sound`);
+      }
 
       const chunks: Blob[] = [];
 
@@ -300,6 +413,10 @@ const UnifiedRecordingModal: React.FC<UnifiedRecordingModalProps> = ({ isOpen, o
           // Save file via IPC
           const filePath = await saveRecordingFile(uint8Array);
           console.log(`UnifiedRecordingModal: Recording saved to ${filePath}`);
+
+          // Clear recording state in main process
+          await stopWebcamRecording();
+          console.log('UnifiedRecordingModal: Webcam recording state cleared in main process');
 
           // Import recording to media library
           console.log('UnifiedRecordingModal: Importing webcam recording to media library...');
@@ -1032,6 +1149,49 @@ const UnifiedRecordingModal: React.FC<UnifiedRecordingModalProps> = ({ isOpen, o
                       </select>
                     </div>
                   )}
+
+                  {/* Microphone Selection */}
+                  {audioDevices.length > 1 && (
+                    <div style={{ marginBottom: '16px' }}>
+                      <label
+                        style={{
+                          display: 'block',
+                          marginBottom: '8px',
+                          fontSize: '0.875rem',
+                          fontWeight: 500,
+                          color: '#cbd5e1',
+                        }}
+                      >
+                        Select Microphone:
+                      </label>
+                      <select
+                        value={selectedAudioDeviceId || ''}
+                        onChange={(e) => handleAudioDeviceChange(e.target.value)}
+                        style={{
+                          width: '100%',
+                          padding: '10px',
+                          backgroundColor: '#0f172a',
+                          color: '#f1f5f9',
+                          border: '1px solid #334155',
+                          borderRadius: '6px',
+                          fontSize: '0.875rem',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {audioDevices.map((device) => (
+                          <option key={device.deviceId} value={device.deviceId}>
+                            {device.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {/* Audio Volume Meter */}
+                  <AudioVolumeMeter
+                    stream={streamRef.current}
+                    key={`audio-meter-${selectedAudioDeviceId || 'default'}`}
+                  />
                 </div>
               )}
             </>
