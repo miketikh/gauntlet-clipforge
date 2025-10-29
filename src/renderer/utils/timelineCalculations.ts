@@ -9,7 +9,7 @@ import { TimelineClip, Track } from '../../types/timeline';
  * Width of the track label column (left sticky area)
  * This is the single source of truth for the label width
  */
-export const TRACK_LABEL_WIDTH = 120;
+export const TRACK_LABEL_WIDTH = 150;
 
 /**
  * Convert a time position to pixel position in the timeline content area
@@ -103,6 +103,21 @@ export function detectOverlaps(track: Track): boolean {
   }
 
   return false;
+}
+
+/**
+ * Calculate total project duration from all tracks
+ * Returns the maximum duration across all tracks
+ *
+ * @param tracks - Array of tracks in the project
+ * @returns Total project duration in seconds
+ */
+export function calculateProjectDuration(tracks: Track[]): number {
+  if (tracks.length === 0) {
+    return 0;
+  }
+
+  return Math.max(...tracks.map(calculateTrackDuration));
 }
 
 /**

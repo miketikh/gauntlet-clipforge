@@ -9,7 +9,7 @@
  */
 
 import { Project, TimelineClip, TrackType } from '../../types/timeline';
-import { findClipAtPosition, calculateClipDuration } from '../utils/timelineCalculations';
+import { findClipAtPosition, calculateClipDuration, calculateProjectDuration } from '../utils/timelineCalculations';
 import { useMediaStore } from '../store/mediaStore';
 import { MediaFile, MediaType } from '../../types/media';
 import { AudioMixer } from './AudioMixer';
@@ -209,25 +209,51 @@ export class TimelinePlayer {
   async seek(time: number): Promise<void> {
     const wasPlaying = this.isPlaying;
 
-    // Pause if currently playing
+    // Temporarily stop playback without changing isPlaying flag
+    // This prevents pause() from setting isPlaying = false
     if (wasPlaying) {
-      this.pause();
+      // Stop RAF loop
+      if (this.animationFrameId !== null) {
+        cancelAnimationFrame(this.animationFrameId);
+        this.animationFrameId = null;
+      }
+
+      // Pause video element
+      this.videoElement.pause();
+
+      // Pause audio elements
+      this.audioElements.forEach((audioElement) => {
+        audioElement.pause();
+      });
+      this.currentAudioClipIds.clear();
     }
 
     this.currentPlayheadPosition = time;
+    this.playbackState = PlaybackState.SEEKING;
 
     const clip = this.getClipAtPosition(time);
 
     if (clip) {
-      // Check if we're still in the same clip
-      if (this.currentClip?.id === clip.id) {
-        // Just seek within the current video
-        await this.seekWithinClip(clip, time);
-      } else {
-        // Load a different clip
-        await this.loadAndPlayClip(clip);
-        if (!wasPlaying) {
-          this.videoElement.pause();
+      // Check if we're still in the same clip (before updating currentClip)
+      const isSameClip = this.currentClip?.id === clip.id;
+
+      // Get media file for this clip
+      const mediaStore = useMediaStore.getState();
+      const media = mediaStore.mediaFiles.find(m => m.id === clip.mediaFileId);
+
+      if (media) {
+        this.currentClip = clip;
+        this.currentMedia = media;
+
+        if (isSameClip) {
+          // Just seek within the current video
+          await this.seekWithinClip(clip, time);
+        } else {
+          // Load a different clip
+          await this.loadAndPlayClip(clip);
+          if (!wasPlaying) {
+            this.videoElement.pause();
+          }
         }
       }
     } else {
@@ -244,7 +270,10 @@ export class TimelinePlayer {
 
     // Resume playing if we were playing before
     if (wasPlaying) {
-      this.play(time);
+      this.playbackState = PlaybackState.IDLE;
+      await this.play(time);
+    } else {
+      this.playbackState = PlaybackState.IDLE;
     }
   }
 
@@ -968,7 +997,8 @@ export class TimelinePlayer {
           const anyClipAhead = this.findNextClipAfter(this.currentPlayheadPosition);
           if (!anyClipAhead) {
             // No more clips ahead - stop at project duration
-            const projectDuration = this.project.duration || 0;
+            // Calculate duration on-the-fly to ensure it's always fresh, even if project reference is stale
+            const projectDuration = calculateProjectDuration(this.project.tracks);
             if (this.currentPlayheadPosition >= projectDuration) {
               console.log('[TimelinePlayer] Reached end of timeline at', projectDuration);
               this.pause();

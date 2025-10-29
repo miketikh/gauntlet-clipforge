@@ -113,8 +113,8 @@ const MediaLibrary: React.FC = () => {
     <div
       style={{
         height: '100%',
-        background: '#2c3e50',
-        borderRight: '1px solid #1a1a1a',
+        background: 'linear-gradient(180deg, #2e4053 0%, #2c3e50 100%)',
+        borderRight: '1px solid #1a252f',
         display: 'flex',
         flexDirection: 'column',
         position: 'relative',
@@ -127,9 +127,10 @@ const MediaLibrary: React.FC = () => {
       {/* Header */}
       <div
         style={{
-          padding: '15px 20px',
-          borderBottom: '1px solid #1a1a1a',
-          background: '#34495e',
+          padding: '16px 20px',
+          borderBottom: '1px solid #1a252f',
+          background: '#263442',
+          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.2)',
         }}
       >
         <h2
@@ -149,7 +150,7 @@ const MediaLibrary: React.FC = () => {
         style={{
           flex: 1,
           overflow: 'auto',
-          padding: mediaFiles.length > 0 ? '10px' : '20px',
+          padding: mediaFiles.length > 0 ? '16px' : '24px',
         }}
       >
         {mediaFiles.length === 0 ? (
@@ -177,7 +178,7 @@ const MediaLibrary: React.FC = () => {
           </div>
         ) : (
           // Media List
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {mediaFiles.map((file) => (
               <MediaItem key={file.id} mediaFile={file} />
             ))}

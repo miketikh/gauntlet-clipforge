@@ -146,7 +146,11 @@ const Preview: React.FC = () => {
   // Handle keyboard shortcuts
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
-      if (e.code === 'Space' && e.target === document.body) {
+      // Allow spacebar unless user is typing in an input/textarea
+      const target = e.target as HTMLElement;
+      const isInputField = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA';
+
+      if (e.code === 'Space' && !isInputField) {
         e.preventDefault();
         if (isPlaying) {
           pause();
@@ -257,26 +261,39 @@ const Preview: React.FC = () => {
       {/* Playback Controls */}
       <div
         style={{
-          padding: '16px',
-          background: '#1a1a1a',
-          borderTop: '1px solid #333',
+          padding: '16px 24px',
+          background: 'linear-gradient(180deg, #1a1a1a 0%, #151515 100%)',
+          borderTop: '2px solid #2a3c4d',
           display: 'flex',
           alignItems: 'center',
-          gap: '16px',
+          gap: '20px',
+          boxShadow: '0 -2px 8px rgba(0, 0, 0, 0.3)',
         }}
       >
         {/* Play/Pause Button */}
         <button
           onClick={handlePlayPause}
           style={{
-            padding: '8px 16px',
-            background: '#3498db',
+            padding: '10px 20px',
+            background: isPlaying
+              ? 'linear-gradient(180deg, #718096 0%, #5a6472 100%)'
+              : 'linear-gradient(180deg, #48bb78 0%, #38a169 100%)',
             color: 'white',
             border: 'none',
-            borderRadius: '4px',
+            borderRadius: '6px',
             cursor: 'pointer',
             fontSize: '14px',
-            fontWeight: 500,
+            fontWeight: 600,
+            boxShadow: isPlaying
+              ? '0 2px 4px rgba(0, 0, 0, 0.2)'
+              : '0 2px 6px rgba(56, 161, 105, 0.3)',
+            transition: 'all 0.2s ease',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.transform = 'translateY(-1px)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = 'translateY(0)';
           }}
         >
           {isPlaying ? 'Pause' : 'Play'}
@@ -285,10 +302,15 @@ const Preview: React.FC = () => {
         {/* Time Display */}
         <div
           style={{
-            color: '#ecf0f1',
+            color: '#e2e8f0',
             fontSize: '14px',
             fontFamily: 'monospace',
             minWidth: '120px',
+            fontWeight: 500,
+            background: '#0f0f0f',
+            padding: '8px 14px',
+            borderRadius: '6px',
+            border: '1px solid #2a2a2a',
           }}
         >
           {formatTime(displayTime)} / {formatTime(duration)}
@@ -297,9 +319,13 @@ const Preview: React.FC = () => {
         {/* Playhead Position Display */}
         <div
           style={{
-            color: '#95a5a6',
+            color: '#a0aec0',
             fontSize: '12px',
             fontFamily: 'monospace',
+            background: '#0f0f0f',
+            padding: '6px 12px',
+            borderRadius: '4px',
+            border: '1px solid #2a2a2a',
           }}
         >
           Timeline: {formatTime(playheadPosition)}
@@ -310,10 +336,14 @@ const Preview: React.FC = () => {
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: '8px',
+            gap: '12px',
+            background: '#0f0f0f',
+            padding: '8px 16px',
+            borderRadius: '6px',
+            border: '1px solid #2a2a2a',
           }}
         >
-          <span style={{ color: '#ecf0f1', fontSize: '14px' }}>Volume</span>
+          <span style={{ color: '#cbd5e0', fontSize: '13px', fontWeight: 500 }}>Volume</span>
           <input
             type="range"
             min="0"
@@ -323,9 +353,10 @@ const Preview: React.FC = () => {
             onChange={handleVolumeChange}
             style={{
               width: '100px',
+              accentColor: '#48bb78',
             }}
           />
-          <span style={{ color: '#ecf0f1', fontSize: '12px', minWidth: '35px' }}>
+          <span style={{ color: '#a0aec0', fontSize: '12px', minWidth: '40px', fontFamily: 'monospace' }}>
             {Math.round(volume * 100)}%
           </span>
         </div>
@@ -334,8 +365,13 @@ const Preview: React.FC = () => {
         <div
           style={{
             marginLeft: 'auto',
-            color: '#7f8c8d',
-            fontSize: '12px',
+            color: '#718096',
+            fontSize: '11px',
+            background: '#0f0f0f',
+            padding: '8px 14px',
+            borderRadius: '6px',
+            border: '1px solid #2a2a2a',
+            fontFamily: 'monospace',
           }}
         >
           Space: Play/Pause | ←/→: Seek ±5s | J/K/L: -1s/Pause/+1s

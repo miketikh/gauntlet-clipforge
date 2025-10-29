@@ -160,8 +160,8 @@ const Timeline: React.FC = () => {
       onClick={handleTimelineClick}
       style={{
         height: '100%',
-        background: '#34495e',
-        borderTop: '1px solid #1a1a1a',
+        background: 'linear-gradient(180deg, #354758 0%, #2d3e4f 100%)',
+        borderTop: '2px solid #1a252f',
         display: 'flex',
         flexDirection: 'column',
         outline: 'none',
@@ -170,12 +170,13 @@ const Timeline: React.FC = () => {
       {/* Timeline Header with Zoom Controls */}
       <div
         style={{
-          padding: '10px 20px',
-          borderBottom: '1px solid #1a1a1a',
-          background: '#2c3e50',
+          padding: '12px 24px',
+          borderBottom: '1px solid #1a252f',
+          background: 'linear-gradient(180deg, #2c3e50 0%, #273849 100%)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
+          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.2)',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
@@ -245,20 +246,28 @@ const Timeline: React.FC = () => {
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: '10px',
+            gap: '12px',
+            background: '#1f2d3a',
+            padding: '6px 12px',
+            borderRadius: '6px',
+            border: '1px solid #2a3c4d',
           }}
         >
           <button
             onClick={handleZoomOut}
             disabled={pixelsPerSecond <= MIN_ZOOM}
             style={{
-              padding: '4px 12px',
-              background: pixelsPerSecond <= MIN_ZOOM ? '#546e7a' : '#34495e',
+              padding: '6px 14px',
+              background: pixelsPerSecond <= MIN_ZOOM ? '#3a4754' : 'linear-gradient(180deg, #4a5568 0%, #3d4452 100%)',
               color: '#ffffff',
-              border: '1px solid #1a1a1a',
+              border: 'none',
               borderRadius: '4px',
               cursor: pixelsPerSecond <= MIN_ZOOM ? 'not-allowed' : 'pointer',
-              fontSize: '0.8rem',
+              fontSize: '0.875rem',
+              fontWeight: 600,
+              opacity: pixelsPerSecond <= MIN_ZOOM ? 0.5 : 1,
+              transition: 'all 0.2s ease',
+              boxShadow: pixelsPerSecond <= MIN_ZOOM ? 'none' : '0 1px 3px rgba(0, 0, 0, 0.2)',
             }}
           >
             -
@@ -267,25 +276,30 @@ const Timeline: React.FC = () => {
           <span
             style={{
               fontSize: '0.75rem',
-              color: '#95a5a6',
+              color: '#a0aec0',
               minWidth: '60px',
               textAlign: 'center',
+              fontWeight: 500,
             }}
           >
-            {pixelsPerSecond}px/s
+            {(pixelsPerSecond / 50).toFixed(1)}x
           </span>
 
           <button
             onClick={handleZoomIn}
             disabled={pixelsPerSecond >= MAX_ZOOM}
             style={{
-              padding: '4px 12px',
-              background: pixelsPerSecond >= MAX_ZOOM ? '#546e7a' : '#34495e',
+              padding: '6px 14px',
+              background: pixelsPerSecond >= MAX_ZOOM ? '#3a4754' : 'linear-gradient(180deg, #4a5568 0%, #3d4452 100%)',
               color: '#ffffff',
-              border: '1px solid #1a1a1a',
+              border: 'none',
               borderRadius: '4px',
               cursor: pixelsPerSecond >= MAX_ZOOM ? 'not-allowed' : 'pointer',
-              fontSize: '0.8rem',
+              fontSize: '0.875rem',
+              fontWeight: 600,
+              opacity: pixelsPerSecond >= MAX_ZOOM ? 0.5 : 1,
+              transition: 'all 0.2s ease',
+              boxShadow: pixelsPerSecond >= MAX_ZOOM ? 'none' : '0 1px 3px rgba(0, 0, 0, 0.2)',
             }}
           >
             +
@@ -306,13 +320,14 @@ const Timeline: React.FC = () => {
           {/* Spacer to match track labels */}
           <div
             style={{
-              minWidth: '120px',
+              minWidth: '150px',
               height: '40px',
-              background: '#263238',
-              borderRight: '1px solid #1a1a1a',
+              background: 'linear-gradient(180deg, #1f2d3a 0%, #1a2633 100%)',
+              borderRight: '1px solid #2a3c4d',
               position: 'sticky',
               left: 0,
               zIndex: 11,
+              boxShadow: '2px 0 4px rgba(0, 0, 0, 0.1)',
             }}
           />
           {/* Ruler content */}

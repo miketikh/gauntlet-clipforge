@@ -126,11 +126,15 @@ const TimelineTrack: React.FC<TimelineTrackProps> = ({
   // Background colors based on track type
   const getTrackBackgroundColor = () => {
     if (track.type === TrackType.AUDIO) {
-      // Audio tracks: dark blue
-      return trackIndex % 2 === 0 ? '#1a237e' : '#1a1f5e';
+      // Audio tracks: dark blue with subtle gradient
+      return trackIndex % 2 === 0
+        ? 'linear-gradient(180deg, #1e2837 0%, #1a2333 100%)'
+        : 'linear-gradient(180deg, #1a2333 0%, #151f2e 100%)';
     } else {
-      // Video tracks: dark gray (existing colors)
-      return trackIndex % 2 === 0 ? '#34495e' : '#2c3e50';
+      // Video tracks: dark gray with subtle gradient
+      return trackIndex % 2 === 0
+        ? 'linear-gradient(180deg, #354758 0%, #2f3f4f 100%)'
+        : 'linear-gradient(180deg, #2f3f4f 0%, #2a3845 100%)';
     }
   };
 
@@ -169,24 +173,28 @@ const TimelineTrack: React.FC<TimelineTrackProps> = ({
         display: 'flex',
         height: '80px',
         background: backgroundColor,
-        borderBottom: '1px solid #1a1a1a',
+        borderBottom: '1px solid rgba(26, 37, 47, 0.6)',
       }}
     >
       {/* Track label on the left */}
       <div
         style={{
-          minWidth: '120px',
-          padding: '10px',
-          background: '#263238',
-          borderRight: '1px solid #1a1a1a',
+          minWidth: '150px',
+          padding: '12px',
+          background: 'linear-gradient(180deg, #1f2d3a 0%, #1a2633 100%)',
+          borderRight: '1px solid #2a3c4d',
           display: 'flex',
           alignItems: 'center',
-          color: '#95a5a6',
+          color: '#a0aec0',
           fontSize: '0.75rem',
           fontWeight: 600,
           position: 'sticky',
           left: 0,
           zIndex: 1,
+          boxShadow: '2px 0 4px rgba(0, 0, 0, 0.1)',
+          whiteSpace: 'nowrap',
+          textOverflow: 'ellipsis',
+          overflow: 'hidden',
         }}
       >
         {trackLabel}
@@ -223,6 +231,31 @@ const TimelineTrack: React.FC<TimelineTrackProps> = ({
             }}
           />
         ))}
+
+        {/* Empty state message */}
+        {track.clips.length === 0 && (
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              pointerEvents: 'none',
+              color: '#718096',
+              fontSize: '0.9rem',
+              fontStyle: 'italic',
+              userSelect: 'none',
+            }}
+          >
+            {track.type === TrackType.AUDIO
+              ? 'Drag audio clips here to get started'
+              : 'Drag video clips here to get started'}
+          </div>
+        )}
 
         {/* Ghost preview while dragging - shows where clip will land */}
         {isOver && canDrop && hoverPosition !== null && draggedItemDuration > 0 && (

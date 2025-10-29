@@ -60,10 +60,11 @@ const TimelineRuler: React.FC<TimelineRulerProps> = ({ duration, pixelsPerSecond
         position: 'relative',
         width: `${totalWidth}px`,
         height: '40px',
-        background: '#2c3e50',
-        borderBottom: '1px solid #1a1a1a',
+        background: 'linear-gradient(180deg, #2a3845 0%, #243340 100%)',
+        borderBottom: '1px solid #1a252f',
         userSelect: 'none',
         cursor: 'pointer',
+        boxShadow: '0 1px 2px rgba(0, 0, 0, 0.15)',
       }}
     >
       {/* Major time markers (every 5 seconds) */}
@@ -84,18 +85,20 @@ const TimelineRuler: React.FC<TimelineRulerProps> = ({ duration, pixelsPerSecond
           {/* Vertical line */}
           <div
             style={{
-              width: '1px',
-              height: '12px',
-              background: '#7f8c8d',
+              width: '2px',
+              height: '14px',
+              background: '#a0aec0',
+              borderRadius: '1px',
             }}
           />
           {/* Time label */}
           <span
             style={{
               fontSize: '0.7rem',
-              color: '#95a5a6',
-              marginTop: '2px',
+              color: '#cbd5e0',
+              marginTop: '3px',
               marginLeft: '4px',
+              fontWeight: 500,
             }}
           >
             {formatTime(time)}
@@ -113,8 +116,9 @@ const TimelineRuler: React.FC<TimelineRulerProps> = ({ duration, pixelsPerSecond
             top: 0,
             width: '1px',
             height: '8px',
-            background: '#546e7a',
+            background: '#718096',
             pointerEvents: 'none',
+            opacity: 0.6,
           }}
         />
       ))}

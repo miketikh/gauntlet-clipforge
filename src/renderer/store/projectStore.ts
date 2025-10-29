@@ -6,7 +6,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { Project, TimelineClip, TrackType } from '../../types/timeline';
-import { calculateTrackDuration } from '../utils/timelineCalculations';
+import { calculateTrackDuration, calculateProjectDuration } from '../utils/timelineCalculations';
 import { useMediaStore } from './mediaStore';
 import { migrateProject } from '../utils/projectMigration';
 
@@ -162,7 +162,7 @@ export const useProjectStore = create<ProjectState>()(
         const updatedProject = {
           ...state.currentProject,
           tracks: updatedTracks,
-          duration: get().getProjectDuration(),
+          duration: calculateProjectDuration(updatedTracks),
         };
 
         set({ currentProject: updatedProject });
@@ -183,7 +183,7 @@ export const useProjectStore = create<ProjectState>()(
         const updatedProject = {
           ...state.currentProject,
           tracks: updatedTracks,
-          duration: get().getProjectDuration(),
+          duration: calculateProjectDuration(updatedTracks),
         };
 
         set({ currentProject: updatedProject });
@@ -214,7 +214,7 @@ export const useProjectStore = create<ProjectState>()(
         const updatedProject = {
           ...state.currentProject,
           tracks: updatedTracks,
-          duration: get().getProjectDuration(),
+          duration: calculateProjectDuration(updatedTracks),
         };
 
         set({ currentProject: updatedProject });

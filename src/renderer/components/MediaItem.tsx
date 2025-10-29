@@ -44,13 +44,15 @@ const MediaItem: React.FC<MediaItemProps> = ({ mediaFile, onClick }) => {
       style={{
         display: 'flex',
         gap: '12px',
-        padding: '10px',
-        background: isHovered ? '#34495e' : 'transparent',
+        padding: '12px',
+        background: isHovered ? '#3d5464' : 'transparent',
         cursor: isDragging ? 'grabbing' : 'pointer',
-        borderRadius: '4px',
-        transition: 'background 0.2s ease',
+        borderRadius: '6px',
+        transition: 'all 0.2s ease',
         position: 'relative',
         opacity: isDragging ? 0.5 : 1,
+        border: isHovered ? '1px solid #4a5f6f' : '1px solid transparent',
+        boxShadow: isHovered ? '0 2px 8px rgba(0, 0, 0, 0.2)' : 'none',
       }}
     >
       {/* Thumbnail or Audio Icon */}
@@ -59,12 +61,14 @@ const MediaItem: React.FC<MediaItemProps> = ({ mediaFile, onClick }) => {
           width: '80px',
           height: '60px',
           flexShrink: 0,
-          background: '#1a1a1a',
-          borderRadius: '4px',
+          background: '#0f0f0f',
+          borderRadius: '6px',
           overflow: 'hidden',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
+          border: '1px solid #2a2a2a',
+          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.3)',
         }}
       >
         {mediaFile.type === MediaType.AUDIO ? (
@@ -135,24 +139,30 @@ const MediaItem: React.FC<MediaItemProps> = ({ mediaFile, onClick }) => {
         </div>
       </div>
 
-      {/* Delete button */}
+      {/* Delete button - only show on hover */}
       <button
         onClick={handleDelete}
         style={{
           position: 'absolute',
-          top: '8px',
-          right: '8px',
-          background: '#e74c3c',
+          top: '6px',
+          right: '6px',
+          background: 'rgba(231, 76, 60, 0.9)',
           color: 'white',
           border: 'none',
-          borderRadius: '3px',
-          padding: '4px 8px',
-          fontSize: '11px',
+          borderRadius: '4px',
+          width: '24px',
+          height: '24px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: '16px',
           cursor: 'pointer',
-          opacity: 0.8,
+          opacity: isHovered ? 1 : 0,
+          transition: 'opacity 0.2s ease, background 0.2s ease',
+          zIndex: 10,
         }}
-        onMouseEnter={(e) => (e.currentTarget.style.opacity = '1')}
-        onMouseLeave={(e) => (e.currentTarget.style.opacity = '0.8')}
+        onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(231, 76, 60, 1)')}
+        onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(231, 76, 60, 0.9)')}
       >
         ×
       </button>

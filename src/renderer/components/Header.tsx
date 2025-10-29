@@ -55,36 +55,49 @@ const Header: React.FC = () => {
     <div
       style={{
         height: '100%',
-        background: '#2c3e50',
+        background: 'linear-gradient(180deg, #2c3e50 0%, #273849 100%)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: '0 20px',
-        borderBottom: '1px solid #1a1a1a',
+        padding: '0 24px',
+        borderBottom: '1px solid #1a252f',
+        boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
       }}
     >
       <h1
         style={{
           margin: 0,
-          fontSize: '1.5rem',
+          fontSize: '1.3rem',
           color: '#ffffff',
           fontWeight: 600,
+          letterSpacing: '0.5px',
         }}
       >
         ClipForge
       </h1>
-      <div style={{ display: 'flex', gap: '10px' }}>
+      <div style={{ display: 'flex', gap: '12px' }}>
         {!currentProject && (
           <button
             onClick={() => createProject('My Video Project')}
             style={{
-              padding: '8px 16px',
-              background: '#9b59b6',
+              padding: '10px 18px',
+              background: 'linear-gradient(180deg, #667eea 0%, #5a67d8 100%)',
               color: '#ffffff',
               border: 'none',
-              borderRadius: '4px',
+              borderRadius: '6px',
               cursor: 'pointer',
-              fontSize: '0.9rem',
+              fontSize: '0.875rem',
+              fontWeight: 500,
+              boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
+              transition: 'all 0.2s ease',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateY(-1px)';
+              e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.3)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
             }}
           >
             New Project
@@ -94,13 +107,24 @@ const Header: React.FC = () => {
           <button
             onClick={resetProject}
             style={{
-              padding: '8px 16px',
-              background: '#e67e22',
+              padding: '10px 18px',
+              background: 'linear-gradient(180deg, #718096 0%, #5a6472 100%)',
               color: '#ffffff',
               border: 'none',
-              borderRadius: '4px',
+              borderRadius: '6px',
               cursor: 'pointer',
-              fontSize: '0.9rem',
+              fontSize: '0.875rem',
+              fontWeight: 500,
+              boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
+              transition: 'all 0.2s ease',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateY(-1px)';
+              e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.3)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
             }}
           >
             Reset Project
@@ -110,40 +134,75 @@ const Header: React.FC = () => {
           onClick={handleImport}
           disabled={isImporting}
           style={{
-            padding: '8px 16px',
-            background: isImporting ? '#7f8c8d' : '#3498db',
+            padding: '10px 18px',
+            background: isImporting ? '#5a6472' : 'linear-gradient(180deg, #4a5568 0%, #3d4452 100%)',
             color: '#ffffff',
             border: 'none',
-            borderRadius: '4px',
+            borderRadius: '6px',
             cursor: isImporting ? 'not-allowed' : 'pointer',
-            fontSize: '0.9rem',
-            opacity: isImporting ? 0.7 : 1,
+            fontSize: '0.875rem',
+            fontWeight: 500,
+            boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
+            transition: 'all 0.2s ease',
+            opacity: isImporting ? 0.6 : 1,
+          }}
+          onMouseEnter={(e) => {
+            if (!isImporting) {
+              e.currentTarget.style.transform = 'translateY(-1px)';
+              e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.3)';
+            }
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
           }}
         >
           {isImporting ? 'Importing...' : 'Import'}
         </button>
         <button
           style={{
-            padding: '8px 16px',
-            background: '#e74c3c',
+            padding: '10px 18px',
+            background: 'linear-gradient(180deg, #4a5568 0%, #3d4452 100%)',
             color: '#ffffff',
             border: 'none',
-            borderRadius: '4px',
+            borderRadius: '6px',
             cursor: 'pointer',
-            fontSize: '0.9rem',
+            fontSize: '0.875rem',
+            fontWeight: 500,
+            boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
+            transition: 'all 0.2s ease',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.transform = 'translateY(-1px)';
+            e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.3)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
           }}
         >
           Record
         </button>
         <button
           style={{
-            padding: '8px 16px',
-            background: '#27ae60',
+            padding: '10px 20px',
+            background: 'linear-gradient(180deg, #48bb78 0%, #38a169 100%)',
             color: '#ffffff',
             border: 'none',
-            borderRadius: '4px',
+            borderRadius: '6px',
             cursor: 'pointer',
-            fontSize: '0.9rem',
+            fontSize: '0.875rem',
+            fontWeight: 600,
+            boxShadow: '0 2px 6px rgba(56, 161, 105, 0.4)',
+            transition: 'all 0.2s ease',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.transform = 'translateY(-1px)';
+            e.currentTarget.style.boxShadow = '0 4px 10px rgba(56, 161, 105, 0.5)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.boxShadow = '0 2px 6px rgba(56, 161, 105, 0.4)';
           }}
         >
           Export
