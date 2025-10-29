@@ -16,6 +16,8 @@ import { AudioMixer } from './AudioMixer';
 import { buildFileUrl } from '../utils/mediaUtils';
 import { waitForCanPlay, waitForSeeked, waitForPlaying } from '../utils/videoEventWaiters';
 import { calculateAudioSettings } from '../utils/audioSettingsCalculator';
+import { ClipQueryService } from './timeline/ClipQueryService';
+import { FadeEffectScheduler } from './timeline/FadeEffectScheduler';
 
 /**
  * Playback state machine
@@ -67,6 +69,10 @@ export class TimelinePlayer {
   // Audio mixer for Web Audio API-based mixing
   private audioMixer: AudioMixer;
 
+  // Service classes
+  private clipQuery: ClipQueryService;
+  private fadeScheduler: FadeEffectScheduler;
+
   // Track which media elements are already connected to Web Audio API
   // createMediaElementSource can only be called once per element
   private connectedElements: Set<HTMLMediaElement> = new Set();
@@ -90,6 +96,10 @@ export class TimelinePlayer {
 
     // Initialize audio mixer
     this.audioMixer = new AudioMixer();
+
+    // Initialize service classes
+    this.clipQuery = new ClipQueryService(project);
+    this.fadeScheduler = new FadeEffectScheduler(this.audioMixer);
 
     // Set up event-driven playback control
     this.setupVideoEventListeners();
@@ -128,6 +138,7 @@ export class TimelinePlayer {
    */
   updateProject(project: Project): void {
     this.project = project;
+    this.clipQuery.updateProject(project);
   }
 
   /**
@@ -142,7 +153,7 @@ export class TimelinePlayer {
 
     this.isPlaying = true;
 
-    const { videoClip, audioClips } = this.getClipsAtPosition(this.currentPlayheadPosition);
+    const { videoClip, audioClips } = this.clipQuery.getClipsAtPosition(this.currentPlayheadPosition);
 
     // Play audio clips if any
     if (audioClips.length > 0) {
@@ -168,7 +179,7 @@ export class TimelinePlayer {
       this.videoElement.pause(); // Hide video in empty space
 
       // Find the next clip ahead
-      const nextClip = this.findNextClipAfter(this.currentPlayheadPosition);
+      const nextClip = this.clipQuery.findNextClipAfter(this.currentPlayheadPosition);
 
       if (nextClip) {
         console.log('[TimelinePlayer] No clip at playhead, will play from next clip at', nextClip.startTime);
@@ -234,7 +245,7 @@ export class TimelinePlayer {
     this.currentPlayheadPosition = time;
     this.playbackState = PlaybackState.SEEKING;
 
-    const clip = this.getClipAtPosition(time);
+    const clip = this.clipQuery.getVideoClipAtPosition(time);
 
     if (clip) {
       // Check if we're still in the same clip (before updating currentClip)
@@ -324,87 +335,6 @@ export class TimelinePlayer {
     return mediaFile.type === MediaType.AUDIO;
   }
 
-  /**
-   * Get all clips at a specific playhead position
-   */
-  private getClipsAtPosition(position: number): {
-    videoClip: TimelineClip | null;
-    audioClips: TimelineClip[];
-  } {
-    const result = {
-      videoClip: null as TimelineClip | null,
-      audioClips: [] as TimelineClip[]
-    };
-
-    if (!this.project.tracks || this.project.tracks.length === 0) {
-      return result;
-    }
-
-    this.project.tracks.forEach(track => {
-      const clip = findClipAtPosition(track, position);
-      if (!clip) return;
-
-      const trackType = track.type || TrackType.VIDEO;
-      if (trackType === TrackType.VIDEO) {
-        result.videoClip = clip;
-      } else if (trackType === TrackType.AUDIO) {
-        result.audioClips.push(clip);
-      }
-    });
-
-    return result;
-  }
-
-  /**
-   * Get the clip at a specific playhead position (only Track 0 for MVP)
-   */
-  private getClipAtPosition(position: number): TimelineClip | null {
-    if (!this.project.tracks || this.project.tracks.length === 0) {
-      return null;
-    }
-
-    // Only play Track 0 (main track) for MVP
-    const mainTrack = this.project.tracks[0];
-    return findClipAtPosition(mainTrack, position);
-  }
-
-  /**
-   * Get the next clip after the current one
-   */
-  private getNextClip(currentClip: TimelineClip): TimelineClip | null {
-    const mainTrack = this.project.tracks[0];
-    if (!mainTrack) return null;
-
-    // Find clips that start at or after current clip's end time
-    const nextClips = mainTrack.clips
-      .filter(clip => clip.startTime >= currentClip.endTime)
-      .sort((a, b) => a.startTime - b.startTime);
-
-    return nextClips.length > 0 ? nextClips[0] : null;
-  }
-
-  /**
-   * Find the next clip after a given timeline position
-   * Searches ALL tracks and returns the earliest clip
-   */
-  private findNextClipAfter(position: number): TimelineClip | null {
-    let nextClip: TimelineClip | null = null;
-    let earliestTime = Infinity;
-
-    // Search all tracks for the earliest next clip
-    for (const track of this.project.tracks) {
-      const nextInTrack = track.clips
-        .filter(clip => clip.startTime > position)
-        .sort((a, b) => a.startTime - b.startTime)[0];
-
-      if (nextInTrack && nextInTrack.startTime < earliestTime) {
-        nextClip = nextInTrack;
-        earliestTime = nextInTrack.startTime;
-      }
-    }
-
-    return nextClip;
-  }
 
   /**
    * Load and play a specific clip
@@ -485,28 +415,8 @@ export class TimelinePlayer {
       this.audioMixer.setSourceVolume(TimelinePlayer.VIDEO_ELEMENT_SOURCE_ID, effectiveVol);
     }
 
-    // Apply fade in effect if configured
-    if (clip.fadeIn && clip.fadeIn > 0) {
-      this.audioMixer.applyFadeIn(TimelinePlayer.VIDEO_ELEMENT_SOURCE_ID, clip.fadeIn);
-      console.log('[TimelinePlayer] Applied fade in:', clip.fadeIn, 'seconds');
-    }
-
-    // Schedule fade out effect if configured
-    if (clip.fadeOut && clip.fadeOut > 0) {
-      const clipDuration = clip.endTime - clip.startTime;
-      const fadeOutStartTime = clipDuration - clip.fadeOut;
-
-      if (fadeOutStartTime > 0) {
-        setTimeout(() => {
-          this.audioMixer.applyFadeOut(TimelinePlayer.VIDEO_ELEMENT_SOURCE_ID, clip.fadeOut!);
-          console.log('[TimelinePlayer] Applied fade out:', clip.fadeOut, 'seconds');
-        }, fadeOutStartTime * 1000);
-      } else {
-        // Fade out duration is longer than clip - start immediately
-        this.audioMixer.applyFadeOut(TimelinePlayer.VIDEO_ELEMENT_SOURCE_ID, clip.fadeOut);
-        console.log('[TimelinePlayer] Applied immediate fade out (duration longer than clip)');
-      }
-    }
+    // Apply fade effects using scheduler
+    this.fadeScheduler.applyFadeEffects(TimelinePlayer.VIDEO_ELEMENT_SOURCE_ID, clip);
 
     // Start playing if we should be playing
     if (this.isPlaying) {
@@ -631,26 +541,8 @@ export class TimelinePlayer {
       this.audioMixer.setSourceVolume(clip.id, audioSettings.clipVolume * audioSettings.trackVolume);
     }
 
-    // Apply fade in if configured
-    if (clip.fadeIn && clip.fadeIn > 0 && offsetInClip < clip.fadeIn) {
-      this.audioMixer.applyFadeIn(clip.id, clip.fadeIn - offsetInClip);
-    }
-
-    // Schedule fade out if configured
-    if (clip.fadeOut && clip.fadeOut > 0) {
-      const clipDuration = clip.endTime - clip.startTime;
-      const fadeOutStartTime = clipDuration - clip.fadeOut;
-      const timeUntilFadeOut = fadeOutStartTime - offsetInClip;
-
-      if (timeUntilFadeOut > 0) {
-        setTimeout(() => {
-          this.audioMixer.applyFadeOut(clip.id, clip.fadeOut!);
-        }, timeUntilFadeOut * 1000);
-      } else {
-        // Already in fade out region
-        this.audioMixer.applyFadeOut(clip.id, clip.fadeOut);
-      }
-    }
+    // Apply fade effects using scheduler
+    this.fadeScheduler.applyFadeEffects(clip.id, clip, offsetInClip);
 
     // Track this clip as currently playing
     this.currentAudioClipIds.add(clip.id);
@@ -739,7 +631,7 @@ export class TimelinePlayer {
     this.callbacks.onPlayheadUpdate(clipEndTime);
 
     // Check for seamless transition: is there a clip at the exact end time?
-    const nextClip = this.getClipAtPosition(clipEndTime);
+    const nextClip = this.clipQuery.getVideoClipAtPosition(clipEndTime);
 
     if (nextClip) {
       // FAST PATH: Seamless transition - load next clip directly
@@ -766,7 +658,7 @@ export class TimelinePlayer {
     }
 
     // No clip at end time - check if there are any clips ahead (gap scenario)
-    const nextClipExists = this.findNextClipAfter(clipEndTime);
+    const nextClipExists = this.clipQuery.findNextClipAfter(clipEndTime);
 
     if (!nextClipExists) {
       // No more clips ahead - end playback
@@ -813,7 +705,7 @@ export class TimelinePlayer {
       // Case 1: Playing a clip (video element is active)
       // Get current position from video element and update UI smoothly at 60 FPS
       // CRITICAL: Verify there's ACTUALLY a clip at current position, not just a stale reference
-      const clipAtPosition = this.getClipAtPosition(this.currentPlayheadPosition);
+      const clipAtPosition = this.clipQuery.getVideoClipAtPosition(this.currentPlayheadPosition);
       if (this.currentClip && clipAtPosition) {
         // Update playhead position from video element
         const videoTime = this.videoElement.currentTime;
@@ -867,7 +759,7 @@ export class TimelinePlayer {
         // Only preload when video element is paused (not currently playing)
         if (!this.isPreloading && this.videoElement.paused) {
           const lookaheadTime = this.currentPlayheadPosition + 0.5; // 500ms ahead
-          const upcomingClips = this.getClipsAtPosition(lookaheadTime);
+          const upcomingClips = this.clipQuery.getClipsAtPosition(lookaheadTime);
 
           if (upcomingClips.videoClip) {
             console.log('[TimelinePlayer] Preloading upcoming clip:', upcomingClips.videoClip.id);
@@ -879,7 +771,7 @@ export class TimelinePlayer {
         }
 
         // Check if we've reached any clips (video or audio)
-        const clipsAtPosition = this.getClipsAtPosition(this.currentPlayheadPosition);
+        const clipsAtPosition = this.clipQuery.getClipsAtPosition(this.currentPlayheadPosition);
 
         // Start video clip if found
         if (clipsAtPosition.videoClip) {
@@ -921,7 +813,7 @@ export class TimelinePlayer {
         // If no clips at current position, check if we've passed all clips
         if (!clipsAtPosition.videoClip && clipsAtPosition.audioClips.length === 0) {
           // Check if we've passed all clips (end of timeline)
-          const anyClipAhead = this.findNextClipAfter(this.currentPlayheadPosition);
+          const anyClipAhead = this.clipQuery.findNextClipAfter(this.currentPlayheadPosition);
           if (!anyClipAhead) {
             // No more clips ahead - stop at project duration
             // Calculate duration on-the-fly to ensure it's always fresh, even if project reference is stale
