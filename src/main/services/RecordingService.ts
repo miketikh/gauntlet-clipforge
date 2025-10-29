@@ -1,5 +1,5 @@
 import { desktopCapturer, app } from 'electron';
-import { DesktopSource } from '../../types/recording';
+import { DesktopSource, PiPConfig } from '../../types/recording';
 import * as path from 'path';
 import * as fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
@@ -11,11 +11,22 @@ interface ActiveRecording {
   outputPath: string;
 }
 
+interface ActiveCombinedRecording {
+  screenRecordingId: string;
+  webcamRecordingId: string;
+  screenSourceId: string;
+  startTime: Date;
+  screenOutputPath: string;
+  webcamOutputPath: string;
+  pipConfig: PiPConfig;
+}
+
 /**
  * RecordingService handles screen recording functionality using Electron's desktopCapturer API
  */
 export class RecordingService {
   private activeRecording: ActiveRecording | null = null;
+  private activeCombinedRecording: ActiveCombinedRecording | null = null;
   private recordingsDir: string;
 
   constructor() {
@@ -125,6 +136,48 @@ export class RecordingService {
   }
 
   /**
+   * Start a webcam recording
+   * @returns Recording ID
+   */
+  async startWebcamRecording(): Promise<{ recordingId: string }> {
+    try {
+      console.log('RecordingService: Starting webcam recording');
+
+      // Check if there's already an active recording
+      if (this.activeRecording) {
+        throw new Error('A recording is already in progress');
+      }
+
+      // Ensure recordings directory exists
+      this.ensureRecordingsDirectory();
+
+      // Generate unique recording ID and output path
+      const recordingId = uuidv4();
+      const timestamp = Date.now();
+      const filename = `recording-webcam-${timestamp}.webm`;
+      const outputPath = path.join(this.recordingsDir, filename);
+
+      // Set active recording state
+      this.activeRecording = {
+        recordingId,
+        sourceId: 'webcam',
+        startTime: new Date(),
+        outputPath
+      };
+
+      console.log(`RecordingService: Webcam recording started with ID ${recordingId}`);
+      console.log(`RecordingService: Output path: ${outputPath}`);
+
+      return { recordingId };
+    } catch (error) {
+      console.error('RecordingService: Error starting webcam recording:', error);
+      throw new Error(
+        `Failed to start webcam recording: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
+  }
+
+  /**
    * Stop the active recording
    * @returns Output file path
    */
@@ -169,6 +222,128 @@ export class RecordingService {
    */
   getRecordingsDirectory(): string {
     return this.recordingsDir;
+  }
+
+  /**
+   * Get recording file path after recording is saved
+   * @returns Recording file path or null if no recording was active
+   */
+  getRecordingFilePath(): string | null {
+    if (!this.activeRecording) {
+      return null;
+    }
+    return this.activeRecording.outputPath;
+  }
+
+  /**
+   * Start combined recording (screen + webcam) for Picture-in-Picture
+   * @param screenSourceId - The ID of the screen source to record
+   * @param pipConfig - Picture-in-Picture configuration (position and size)
+   * @returns Recording info for both streams
+   */
+  async startCombinedRecording(
+    screenSourceId: string,
+    pipConfig: PiPConfig
+  ): Promise<{
+    screenRecordingId: string;
+    webcamRecordingId: string;
+    screenSourceId: string;
+  }> {
+    try {
+      console.log(`RecordingService: Starting combined recording for source ${screenSourceId}`);
+      console.log(`RecordingService: PiP config - position: ${pipConfig.position}, size: ${pipConfig.size}`);
+
+      // Check if there's already an active recording
+      if (this.activeRecording || this.activeCombinedRecording) {
+        throw new Error('A recording is already in progress');
+      }
+
+      // Ensure recordings directory exists
+      this.ensureRecordingsDirectory();
+
+      // Generate unique recording IDs and output paths
+      const screenRecordingId = uuidv4();
+      const webcamRecordingId = uuidv4();
+      const timestamp = Date.now();
+
+      const screenFilename = `recording-screen-${timestamp}.webm`;
+      const webcamFilename = `recording-webcam-${timestamp}.webm`;
+
+      const screenOutputPath = path.join(this.recordingsDir, screenFilename);
+      const webcamOutputPath = path.join(this.recordingsDir, webcamFilename);
+
+      // Set active combined recording state
+      this.activeCombinedRecording = {
+        screenRecordingId,
+        webcamRecordingId,
+        screenSourceId,
+        startTime: new Date(),
+        screenOutputPath,
+        webcamOutputPath,
+        pipConfig,
+      };
+
+      console.log(`RecordingService: Combined recording started`);
+      console.log(`RecordingService: Screen ID: ${screenRecordingId}, path: ${screenOutputPath}`);
+      console.log(`RecordingService: Webcam ID: ${webcamRecordingId}, path: ${webcamOutputPath}`);
+
+      return {
+        screenRecordingId,
+        webcamRecordingId,
+        screenSourceId,
+      };
+    } catch (error) {
+      console.error('RecordingService: Error starting combined recording:', error);
+      throw new Error(
+        `Failed to start combined recording: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
+  }
+
+  /**
+   * Stop the active combined recording
+   * @returns Output file paths and PiP config
+   */
+  async stopCombinedRecording(): Promise<{
+    screenPath: string;
+    webcamPath: string;
+    pipConfig: PiPConfig;
+  }> {
+    try {
+      if (!this.activeCombinedRecording) {
+        throw new Error('No active combined recording to stop');
+      }
+
+      console.log('RecordingService: Stopping combined recording...');
+
+      const screenPath = this.activeCombinedRecording.screenOutputPath;
+      const webcamPath = this.activeCombinedRecording.webcamOutputPath;
+      const pipConfig = this.activeCombinedRecording.pipConfig;
+      const duration = Date.now() - this.activeCombinedRecording.startTime.getTime();
+
+      console.log(`RecordingService: Combined recording duration: ${duration}ms`);
+      console.log(`RecordingService: Screen saved to: ${screenPath}`);
+      console.log(`RecordingService: Webcam saved to: ${webcamPath}`);
+
+      // Clear active combined recording state
+      this.activeCombinedRecording = null;
+
+      return { screenPath, webcamPath, pipConfig };
+    } catch (error) {
+      console.error('RecordingService: Error stopping combined recording:', error);
+      this.activeCombinedRecording = null; // Clear state even on error
+      throw new Error(
+        `Failed to stop combined recording: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
+  }
+
+  /**
+   * Get the current active combined recording info
+   * @returns Active combined recording info or null
+   */
+  getActiveCombinedRecording(): ActiveCombinedRecording | null {
+    return this.activeCombinedRecording;
   }
 }
 

@@ -3,7 +3,7 @@ import { RotateCcw, Upload, Circle, Download } from 'lucide-react';
 import { selectFile, importVideo, generateThumbnail } from '../utils/ipc';
 import { useMediaStore } from '../store/mediaStore';
 import { useProjectStore } from '../store/projectStore';
-import RecordingModal from './RecordingModal';
+import UnifiedRecordingModal from './UnifiedRecordingModal';
 import ExportDialog from './ExportDialog';
 
 const Header: React.FC = () => {
@@ -244,7 +244,7 @@ const Header: React.FC = () => {
       </div>
     </div>
 
-    <RecordingModal isOpen={isRecordingModalOpen} onClose={() => setIsRecordingModalOpen(false)} />
+    <UnifiedRecordingModal isOpen={isRecordingModalOpen} onClose={() => setIsRecordingModalOpen(false)} />
     <ExportDialog isOpen={isExportDialogOpen} onClose={() => setIsExportDialogOpen(false)} />
     </>
   );

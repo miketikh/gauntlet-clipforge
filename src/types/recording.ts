@@ -38,3 +38,30 @@ export interface RecordingMetadata {
     height: number;
   };
 }
+
+/**
+ * Picture-in-Picture position presets
+ */
+export type PiPPosition = 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left';
+
+/**
+ * Picture-in-Picture size presets
+ */
+export type PiPSize = 'small' | 'medium' | 'large';
+
+/**
+ * Picture-in-Picture configuration
+ */
+export interface PiPConfig {
+  position: PiPPosition;
+  size: PiPSize;
+}
+
+/**
+ * Get percentage values for PiP size
+ */
+export const PIP_SIZE_MAP: Record<PiPSize, number> = {
+  small: 0.20,   // 20% of screen size
+  medium: 0.25,  // 25% of screen size
+  large: 0.30,   // 30% of screen size
+};

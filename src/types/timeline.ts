@@ -49,6 +49,11 @@ export interface TimelineClip {
   fadeIn?: number; // Fade in duration in seconds
   fadeOut?: number; // Fade out duration in seconds
   cutRanges?: CutRange[]; // Audio cut ranges (e.g., silence removal, filler word cuts)
+
+  // PiP positioning properties (optional, for overlay clips)
+  position?: { x: number; y: number }; // Position as percentage (0-100) - e.g., {x: 75, y: 75} = bottom-right
+  scale?: number; // Scale as decimal (0-1) - e.g., 0.25 = 25% of screen size
+  linkedRecordingId?: string; // ID of linked recording (for screen+webcam pairs)
 }
 
 /**

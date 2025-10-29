@@ -10,6 +10,8 @@ Phase 2 adds recording capabilities to ClipForge, enabling users to capture scre
 
 **Architecture Pattern:** All recording logic lives in the main process for better access to Electron APIs, with UI controls in the renderer process communicating via IPC. We'll use a RecordingService class to manage recording state and coordinate multiple simultaneous streams.
 
+**Unified Recording UX:** Instead of separate buttons for each recording type, we use a single "Record" button that opens a unified modal with a step-based flow. Users choose what to record (Screen Only / Webcam Only / Screen + Webcam), then proceed through type-specific configuration steps. This creates a cleaner, more intuitive UX.
+
 ## Instructions for AI Agent
 
 1. **Read Phase**: Before implementing each PR, read all files listed in the "Files to Read" section
@@ -153,26 +155,26 @@ This section establishes the foundation for screen recording using Electron's de
 - Read `src/types/media.ts` for MediaAsset types
 
 **Tasks:**
-- [ ] Update `src/main/services/RecordingService.ts`:
+- [x] Update `src/main/services/RecordingService.ts`:
   - After recording stops, generate metadata using FFprobe
   - Extract: duration, resolution, file size, codec info
   - Generate thumbnail at 1-second mark
   - Return complete MediaAsset object
-- [ ] Update `src/main/services/MediaService.ts`:
+- [x] Update `src/main/services/MediaService.ts`:
   - Add `importRecording(recordingPath: string)` method
   - Move recording from temp directory to project media folder
   - Generate unique filename: `recording_${timestamp}.webm`
   - Add to media assets list
-- [ ] Update `src/renderer/components/RecordingModal.tsx`:
+- [x] Update `src/renderer/components/RecordingModal.tsx`:
   - After recording stops, show "Processing..." state
   - Wait for IPC response with MediaAsset data
   - Show success message: "Recording added to library"
   - Auto-close modal after 2 seconds
-- [ ] Update media library UI:
+- [x] Update media library UI:
   - New recording appears in media library automatically
   - Show recording indicator badge/icon on thumbnail
   - Display recording metadata (duration, resolution)
-- [ ] Optional: Add recording to timeline automatically
+- [ ] Optional: Add recording to timeline automatically (SKIPPED per instructions)
   - Create store action to add clip to timeline
   - Place at current playhead position or end of timeline
   - User preference toggle: "Auto-add recordings to timeline" (default: true)
@@ -218,22 +220,22 @@ This section adds webcam recording capability using standard getUserMedia API. M
 - Read `src/renderer/components/RecordingModal.tsx` to reuse UI patterns
 
 **Tasks:**
-- [ ] Create `src/renderer/components/WebcamRecordingModal.tsx`:
+- [x] Create `src/renderer/components/WebcamRecordingModal.tsx`:
   - Modal with live webcam preview (video element)
   - "Start Recording" and "Cancel" buttons
   - Recording timer (hidden until recording starts)
   - Red recording indicator
   - Preview shows user's webcam feed in real-time
-- [ ] Add webcam access logic:
+- [x] Add webcam access logic:
   - Use `navigator.mediaDevices.getUserMedia({ video: true, audio: true })`
   - Request video constraints: { width: 1280, height: 720 } (720p default)
   - Request audio: true (include microphone audio)
   - Handle permission denial gracefully (show error message)
-- [ ] Add "Record Webcam" button to toolbar:
+- [x] Add "Record Webcam" button to toolbar:
   - Opens WebcamRecordingModal
   - Position next to "Record Screen" button
   - Webcam icon
-- [ ] Display available cameras if multiple:
+- [x] Display available cameras if multiple:
   - Use `navigator.mediaDevices.enumerateDevices()` to list cameras
   - Dropdown to select camera (if > 1 camera found)
   - Default to first available camera
@@ -261,7 +263,81 @@ This section adds webcam recording capability using standard getUserMedia API. M
 
 ---
 
-### PR 2.2.2: Webcam Recording Implementation
+### PR 2.2.2: Unify Recording UX
+
+**Goal:** Merge RecordingModal and WebcamRecordingModal into one UnifiedRecordingModal with step-based flow
+
+**Files to Read:**
+- Read `src/renderer/components/RecordingModal.tsx` to understand screen recording UI
+- Read `src/renderer/components/WebcamRecordingModal.tsx` to understand webcam recording UI
+- Read `src/renderer/components/Header.tsx` or toolbar component
+
+**Tasks:**
+- [x] Create `src/renderer/components/UnifiedRecordingModal.tsx`:
+  - Step 1: "What do you want to record?" selection screen
+  - Display three cards: "Screen Only", "Webcam Only", "Screen + Webcam (PiP)"
+  - Each card has icon, title, description
+  - Click card to proceed to Step 2
+- [x] Implement Step 2a: Screen source selection (if Screen Only selected):
+  - Reuse screen source selection grid from RecordingModal
+  - Show thumbnails of available screens and windows
+  - "Back" button to return to Step 1
+  - "Record" button after selecting source
+- [x] Implement Step 2b: Webcam configuration (if Webcam Only selected):
+  - Reuse webcam preview and camera selection from WebcamRecordingModal
+  - Show live webcam preview
+  - Camera selection dropdown (if multiple cameras)
+  - "Back" button to return to Step 1
+  - "Start Recording" button
+- [x] Implement Step 3: Recording controls (shared for both types):
+  - Recording timer (00:00 format)
+  - Red recording indicator with pulse animation
+  - "Stop Recording" button
+  - Recording type indicator ("Recording screen..." or "Recording webcam...")
+  - Processing state after stop clicked
+- [x] Extract shared components:
+  - `RecordingProgress.tsx` - Timer and recording indicator
+  - `RecordingTypeCard.tsx` - Selection card component for Step 1
+  - Shared styles for consistent look across steps
+- [x] Update `src/renderer/components/Header.tsx`:
+  - Remove "Record Screen" and "Record Webcam" buttons
+  - Add single "Record" button with recording icon
+  - Opens UnifiedRecordingModal when clicked
+- [x] Migrate recording logic:
+  - Screen recording flow from RecordingModal → UnifiedRecordingModal Step 2a/3
+  - Webcam recording flow from WebcamRecordingModal → UnifiedRecordingModal Step 2b/3
+  - Ensure all IPC calls and state management preserved
+
+**What to Test:**
+1. Click "Record" button - unified modal opens showing Step 1
+2. Step 1 shows three cards: Screen Only, Webcam Only, Screen + Webcam
+3. Click "Screen Only" - Step 2a appears with screen source selection
+4. Select screen source - Step 3 starts recording with timer
+5. Stop recording - processing completes, recording added to library
+6. Click "Record" again, choose "Webcam Only" - Step 2b shows webcam preview
+7. Start webcam recording - Step 3 shows webcam recording controls
+8. Stop webcam recording - processing completes, added to library
+9. Click "Back" during Step 2 - returns to Step 1 without errors
+10. All recording functionality from previous PRs still works
+
+**Files Changed:**
+- `src/renderer/components/UnifiedRecordingModal.tsx` - NEW: Unified recording modal
+- `src/renderer/components/RecordingProgress.tsx` - NEW: Extracted progress component
+- `src/renderer/components/RecordingTypeCard.tsx` - NEW: Selection card component
+- `src/renderer/components/Header.tsx` - Replace two buttons with one "Record" button
+- `src/renderer/components/RecordingModal.tsx` - DEPRECATED: Can be removed or kept as reference
+- `src/renderer/components/WebcamRecordingModal.tsx` - DEPRECATED: Can be removed or kept as reference
+
+**Notes:**
+- Step 1 cards should have hover states for better UX
+- "Back" button should clean up any active streams (webcam, etc.)
+- Screen + Webcam card can be disabled/grayed out until PR 2.3.1 implementation
+- Use consistent spacing and animation transitions between steps
+- Preserve all error handling from original modals
+
+---
+
+### PR 2.2.3: Webcam Recording Implementation
 
 **Goal:** Record webcam video with audio and save to media library
 
@@ -270,28 +346,28 @@ This section adds webcam recording capability using standard getUserMedia API. M
 - Read `src/main/services/RecordingService.ts` to reuse file saving logic
 
 **Tasks:**
-- [ ] Update `src/renderer/components/WebcamRecordingModal.tsx`:
-  - Add "Start Recording" button click handler
+- [x] Update `src/renderer/components/UnifiedRecordingModal.tsx`:
+  - Implement webcam recording logic in Step 3
   - Initialize MediaRecorder with webcam stream
   - Show recording timer and red indicator
-  - Change button to "Stop Recording"
+  - Handle "Stop Recording" button click
   - Disable camera selection dropdown during recording
-- [ ] Reuse `src/renderer/services/MediaRecorderService.ts`:
+- [x] Reuse `src/renderer/services/MediaRecorderService.ts`:
   - Same logic as screen recording (MediaRecorder, save chunks)
   - Configure for video + audio tracks
   - Save as WebM with VP8/VP9 video, Opus audio
-- [ ] Add post-recording processing:
+- [x] Add post-recording processing:
   - Save webcam recording to temp directory
   - Generate thumbnail from first frame
   - Extract metadata (duration, resolution)
   - Import to media library (reuse MediaService logic)
   - Show success message: "Webcam recording added to library"
-- [ ] Add webcam badge to media library:
+- [x] Add webcam badge to media library:
   - Show webcam icon on webcam recordings
   - Differentiate from screen recordings visually
 
 **What to Test:**
-1. Click "Start Recording" - recording begins
+1. Select "Webcam Only" in unified modal, click "Start Recording"
 2. Timer counts up, red indicator blinks
 3. Speak and move in frame - verify audio and video recording
 4. Record for 30 seconds, click "Stop Recording"
@@ -302,7 +378,7 @@ This section adds webcam recording capability using standard getUserMedia API. M
 9. File size reasonable for 30-second recording (< 20MB)
 
 **Files Changed:**
-- `src/renderer/components/WebcamRecordingModal.tsx` - Add recording logic
+- `src/renderer/components/UnifiedRecordingModal.tsx` - Add webcam recording logic
 - `src/renderer/services/MediaRecorderService.ts` - Reuse for webcam
 - `src/main/services/MediaService.ts` - Handle webcam imports
 - `src/renderer/components/MediaLibrary.tsx` - Show webcam badge
@@ -321,60 +397,74 @@ This section adds webcam recording capability using standard getUserMedia API. M
 
 This section enables recording screen and webcam simultaneously, with automatic Picture-in-Picture layout on the timeline. This is the most complex recording feature but creates impressive demo moments.
 
-### PR 2.3.1: Combined Recording Setup
+### PR 2.3.1: Combined Recording Setup & PiP Configuration
 
-**Goal:** Record screen and webcam streams simultaneously as separate files
+**Goal:** Record screen and webcam streams simultaneously as separate files with PiP layout configuration
 
 **Files to Read:**
 - Read `src/main/services/RecordingService.ts` to understand recording coordination
 - Read `src/renderer/services/MediaRecorderService.ts` to understand stream handling
+- Read `src/renderer/components/UnifiedRecordingModal.tsx` for step flow
 
 **Tasks:**
-- [ ] Create `src/renderer/components/PiPRecordingModal.tsx`:
-  - Combined UI showing webcam preview in corner
-  - Screen source selection (reuse from RecordingModal)
-  - Webcam preview overlay positioned in bottom-right corner
-  - Recording controls for both streams
-  - Synchronized start/stop buttons
-- [ ] Update `src/main/services/RecordingService.ts`:
-  - Add `startCombinedRecording(screenSourceId: string)` method
+- [x] Update `src/renderer/components/UnifiedRecordingModal.tsx`:
+  - Enable "Screen + Webcam (PiP)" card in Step 1
+  - Implement Step 2c: PiP Configuration (when Screen + Webcam selected)
+  - Show screen source selection grid (reuse from Step 2a)
+  - Show webcam preview overlay in corner (live preview)
+  - Add PiP position presets: Bottom-Right, Bottom-Left, Top-Right, Top-Left
+  - Add PiP size presets: Small (20%), Medium (25%), Large (30%)
+  - "Back" button to return to Step 1
+  - "Start Recording" button after screen + position selected
+- [x] Implement Step 3 for PiP recording:
+  - Show both "Recording screen..." and webcam preview during recording
+  - Single timer for both recordings
+  - Red recording indicator
+  - "Stop Recording" stops both simultaneously
+  - Show "Processing both recordings..." state
+- [x] Update `src/main/services/RecordingService.ts`:
+  - Add `startCombinedRecording(screenSourceId: string, pipConfig: PiPConfig)` method
   - Track two active recordings: screenRecordingId, webcamRecordingId
   - Coordinate start times (start both as close together as possible)
+  - Store PiP configuration (position, size) with recording metadata
   - Return both stream source info to renderer
-- [ ] Create `src/renderer/services/CombinedRecordingService.ts`:
+- [x] Create `src/renderer/services/CombinedRecordingService.ts`:
   - Manage two MediaRecorder instances simultaneously
   - Screen MediaRecorder and Webcam MediaRecorder
   - Start both recorders at the same time
   - Track elapsed time for both
   - Stop both recorders together
   - Save both recordings with linked IDs
-- [ ] Add "Record Screen + Webcam" button to toolbar:
-  - Opens PiPRecordingModal
-  - Icon combining screen + webcam icons
-  - Position after other recording buttons
+- [x] Add PiP configuration types:
+  - PiPPosition: 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left'
+  - PiPSize: 'small' | 'medium' | 'large' (maps to 20%, 25%, 30%)
+  - PiPConfig: { position: PiPPosition, size: PiPSize }
 
 **What to Test:**
-1. Click "Record Screen + Webcam" button - modal opens
-2. Select screen source - webcam preview appears in corner
-3. Webcam preview is live and responsive
-4. Click "Start Recording" - both recordings start simultaneously
-5. Timer shows elapsed time for both
-6. Verify both webcam light and screen recording indicators active
-7. Click "Stop Recording" - both recordings stop within 1 second of each other
-8. Two separate files saved to temp directory (screen.webm, webcam.webm)
-9. Both files have similar durations (within 1 second difference acceptable)
+1. Click "Record", select "Screen + Webcam (PiP)" - Step 2c appears
+2. Step 2c shows screen source selection grid
+3. After selecting screen, webcam preview appears in corner
+4. PiP position presets change webcam preview position in real-time
+5. PiP size presets change webcam preview size
+6. Click "Start Recording" - both recordings start simultaneously
+7. Timer shows elapsed time, both webcam and screen indicators active
+8. Webcam preview stays visible during recording
+9. Click "Stop Recording" - both recordings stop within 1 second of each other
+10. Two separate files saved to temp directory (screen.webm, webcam.webm)
+11. Both files have similar durations (within 1 second difference acceptable)
 
 **Files Changed:**
-- `src/renderer/components/PiPRecordingModal.tsx` - NEW: Combined recording UI
+- `src/renderer/components/UnifiedRecordingModal.tsx` - Add Step 2c and PiP recording
 - `src/main/services/RecordingService.ts` - Add combined recording support
 - `src/renderer/services/CombinedRecordingService.ts` - NEW: Dual recorder manager
-- `src/renderer/components/Toolbar.tsx` - Add PiP button
+- `src/types/recording.ts` - Add PiP configuration types
 
 **Notes:**
 - Timing synchronization is best-effort - perfect sync not required for demo
 - Both recordings start within 100-200ms of each other is acceptable
 - If one recording fails, stop both and show error (don't orphan single recording)
-- Webcam preview in modal should be small (320x240 or similar)
+- Webcam preview in Step 2c should match selected PiP size/position
+- PiP configuration is stored with recordings for export phase
 
 ---
 
@@ -388,30 +478,31 @@ This section enables recording screen and webcam simultaneously, with automatic 
 - Read `src/renderer/components/Timeline.tsx` to understand multi-track rendering
 
 **Tasks:**
-- [ ] Update `src/main/services/MediaService.ts`:
-  - Add `importCombinedRecording(screenPath, webcamPath)` method
+- [x] Update `src/main/services/MediaService.ts`:
+  - Add `importCombinedRecording(screenPath, webcamPath, pipConfig)` method
   - Import both recordings as MediaAsset objects
   - Link recordings with metadata: linkedRecordingId, recordingType: 'screen' | 'webcam'
+  - Store PiP configuration with webcam asset
   - Return both assets with relationship information
-- [ ] Update `src/renderer/stores/timelineStore.ts`:
-  - Add action: `addPiPRecording(screenAsset, webcamAsset)`
+- [x] Update `src/renderer/stores/timelineStore.ts`:
+  - Add action: `addPiPRecording(screenAsset, webcamAsset, pipConfig)`
   - Place screen recording on main video track (Track 0)
   - Place webcam recording on overlay track (Track 1)
-  - Set webcam position: bottom-right corner
-  - Set webcam size: 25% of screen width
+  - Set webcam position based on pipConfig.position
+  - Set webcam size based on pipConfig.size (20%, 25%, or 30%)
   - Align both clips to start at same timeline position
-- [ ] Update Timeline UI to show overlay track:
+- [x] Update Timeline UI to show overlay track:
   - Render Track 1 as overlay/PiP track visually distinct from main track
   - Show webcam clip with smaller height
   - Display PiP icon on webcam clip
-- [ ] Add PiP positioning properties to TimelineClip:
+- [x] Add PiP positioning properties to TimelineClip:
   - Add to TimelineClip type: position: { x: number, y: number }, scale: number
-  - Default position: { x: 75, y: 75 } (percentages for bottom-right)
-  - Default scale: 0.25 (25% of frame width)
-- [ ] Create `src/renderer/components/PiPPreview.tsx`:
+  - Map PiPPosition to percentages: bottom-right = { x: 75, y: 75 }, etc.
+  - Map PiPSize to scale: small = 0.20, medium = 0.25, large = 0.30
+- [x] Create `src/renderer/components/PiPPreview.tsx`:
   - Preview component showing how PiP will look in export
   - Screen video as background layer
-  - Webcam video as overlay in corner
+  - Webcam video as overlay in configured position
   - Use HTML video elements positioned with CSS
 
 **What to Test:**
@@ -423,7 +514,7 @@ This section enables recording screen and webcam simultaneously, with automatic 
 6. Both clips have approximately same duration
 7. Scrub timeline - both previews update together
 8. Click webcam clip - can be moved/resized independently (stretch goal)
-9. Export timeline - verify PiP layout renders correctly in output video
+9. PiP position matches configuration selected during recording
 
 **Files Changed:**
 - `src/main/services/MediaService.ts` - Combined recording import
@@ -433,11 +524,11 @@ This section enables recording screen and webcam simultaneously, with automatic 
 - `src/renderer/components/PiPPreview.tsx` - NEW: PiP preview component
 
 **Notes:**
-- For MVP, fixed PiP position (bottom-right) is acceptable
+- For MVP, PiP position set during recording is fixed on timeline
 - Stretch goal: draggable webcam position on timeline, but not required
-- PiP scale of 25% is good default for demo
 - Timeline preview can show simplified PiP (just stacked videos)
 - Real PiP compositing happens during export via FFmpeg
+- Webcam clip should visually indicate its overlay nature (different color, icon, etc.)
 
 ---
 
@@ -450,21 +541,21 @@ This section enables recording screen and webcam simultaneously, with automatic 
 - Read FFmpeg overlay documentation (see notes)
 
 **Tasks:**
-- [ ] Update `src/main/services/ExportService.ts`:
+- [x] Update `src/main/services/ExportService.ts`:
   - Detect PiP layout in timeline (screen + webcam tracks)
   - Generate FFmpeg overlay filter command
   - Position webcam overlay using filter_complex with overlay filter
   - Calculate overlay position from TimelineClip position/scale properties
-- [ ] Implement FFmpeg overlay command generation:
+- [x] Implement FFmpeg overlay command generation:
   - Base command structure: `ffmpeg -i screen.webm -i webcam.webm -filter_complex "[1]scale=w:h[pip];[0][pip]overlay=x:y"`
-  - Calculate webcam size: `scale=${screenWidth * 0.25}:${screenHeight * 0.25}`
-  - Calculate position: x = screenWidth * 0.75, y = screenHeight * 0.75
+  - Calculate webcam size based on scale: `scale=${screenWidth * scale}:${screenHeight * scale}`
+  - Calculate position based on position percentages: x = screenWidth * (x/100), y = screenHeight * (y/100)
   - Handle both inputs with synchronized timing
-- [ ] Add export progress tracking:
+- [x] Add export progress tracking:
   - FFmpeg reports progress via stderr
   - Parse progress and update UI progress bar
   - Show estimated time remaining
-- [ ] Handle export errors gracefully:
+- [x] Handle export errors gracefully:
   - Catch FFmpeg errors and show user-friendly message
   - If overlay fails, offer "Export screen only" fallback
   - Log detailed error to console for debugging
@@ -473,12 +564,14 @@ This section enables recording screen and webcam simultaneously, with automatic 
 1. Export timeline with PiP layout - FFmpeg command generates correctly
 2. Progress bar updates during export (0% → 100%)
 3. Export completes within reasonable time (2-3x realtime for demo)
-4. Output video shows screen with webcam in bottom-right corner
-5. Webcam overlay is correct size (25% of screen width)
-6. Webcam overlay position is correct (bottom-right, with padding)
+4. Output video shows screen with webcam in configured position
+5. Webcam overlay is correct size (matches selected PiP size)
+6. Webcam overlay position is correct (matches selected position)
 7. Audio from screen recording plays correctly (webcam audio muted for MVP)
 8. Play exported video - no visual glitches or sync issues
 9. Export different duration recordings (30s, 2min, 5min) - all work
+10. Test all four PiP positions (bottom-right, bottom-left, top-right, top-left)
+11. Test all three PiP sizes (small, medium, large)
 
 **Files Changed:**
 - `src/main/services/ExportService.ts` - Add PiP export logic
@@ -492,6 +585,7 @@ This section enables recording screen and webcam simultaneously, with automatic 
 - For MVP, mute webcam audio - only include screen audio in export
 - Stretch goal: mix both audio tracks, but this adds complexity
 - Test export on actual MacBook to ensure performance acceptable
+- Add 10-20px padding from edges for better visual appearance
 
 ---
 
@@ -512,7 +606,7 @@ Final polish pass to handle common errors and improve UX.
 - [ ] Add permission error handling:
   - macOS screen recording permission not granted - show settings link
   - Webcam permission denied - show friendly message with retry button
-  - No webcam found - disable webcam recording buttons
+  - No webcam found - disable webcam recording options in Step 1
 - [ ] Add recording duration limits:
   - Warn if recording exceeds 30 minutes
   - Offer to stop and save recording
@@ -543,9 +637,7 @@ Final polish pass to handle common errors and improve UX.
 
 **Files Changed:**
 - `src/main/services/RecordingService.ts` - Add error handling
-- `src/renderer/components/RecordingModal.tsx` - Add error UI states
-- `src/renderer/components/WebcamRecordingModal.tsx` - Add error UI states
-- `src/renderer/components/PiPRecordingModal.tsx` - Add error UI states
+- `src/renderer/components/UnifiedRecordingModal.tsx` - Add error UI states
 - `src/renderer/components/Toast.tsx` - NEW: Toast notification component
 - `src/main/utils/storageCheck.ts` - NEW: Disk space utilities
 
@@ -582,10 +674,8 @@ Final polish pass to handle common errors and improve UX.
   - Apply audio quality to MediaRecorder options
   - Use custom save location if specified
 - [ ] Add keyboard shortcuts:
-  - Cmd+Shift+R: Start screen recording (with source selection)
-  - Cmd+Shift+W: Start webcam recording
-  - Cmd+Shift+P: Start PiP recording
-  - Esc: Cancel recording (with confirmation if recording active)
+  - Cmd+Shift+R: Start unified recording modal
+  - Esc: Close modal or cancel recording (with confirmation if recording active)
 
 **What to Test:**
 1. Open recording settings - all options visible
@@ -594,7 +684,7 @@ Final polish pass to handle common errors and improve UX.
 4. Toggle "Auto-add to timeline" off - recording not added automatically
 5. Change save location - recordings save to new folder
 6. Settings persist after app restart
-7. Press Cmd+Shift+R - screen recording starts
+7. Press Cmd+Shift+R - unified recording modal opens
 8. Press Esc during recording - confirmation dialog appears
 9. Different quality settings produce expected file sizes
 
@@ -618,29 +708,35 @@ Final polish pass to handle common errors and improve UX.
 
 Phase 2 is complete when all of the following are true:
 
+### Unified Recording UX
+- [ ] User clicks single "Record" button to open unified modal
+- [ ] Step 1 shows three clear recording options (Screen / Webcam / Screen + Webcam)
+- [ ] Each recording type has appropriate configuration step (Step 2a/2b/2c)
+- [ ] Recording controls (Step 3) are consistent across all recording types
+- [ ] "Back" button allows returning to Step 1 to change recording type
+
 ### Screen Recording
-- [ ] User can click "Record Screen" button and see list of available screens/windows
-- [ ] User can select a screen/window and start recording
+- [ ] User can select a screen/window from source grid
 - [ ] Recording timer shows elapsed time during recording
 - [ ] User can stop recording and file is saved automatically
 - [ ] Recording appears in media library with thumbnail and metadata
 - [ ] Recording can be added to timeline and played in preview
 
 ### Webcam Recording
-- [ ] User can click "Record Webcam" button and see webcam preview
+- [ ] User can see webcam preview and select camera (if multiple)
 - [ ] User can start webcam recording with audio
 - [ ] Recording includes both video and audio from microphone
 - [ ] User can stop recording and file is saved automatically
 - [ ] Webcam recording appears in media library with webcam badge
 
 ### Simultaneous Screen + Webcam (PiP)
-- [ ] User can click "Record Screen + Webcam" button
 - [ ] User can select screen source while seeing webcam preview
+- [ ] User can configure PiP position (4 options) and size (3 options)
 - [ ] Both recordings start simultaneously
 - [ ] Both recordings stop simultaneously
 - [ ] Screen recording added to Track 0, webcam to Track 1 automatically
-- [ ] Webcam positioned in bottom-right corner (PiP layout)
-- [ ] Export produces video with webcam overlay in correct position
+- [ ] Webcam positioned according to selected PiP configuration
+- [ ] Export produces video with webcam overlay in correct position and size
 - [ ] Exported video plays smoothly with no sync issues
 
 ### Error Handling
@@ -651,7 +747,7 @@ Phase 2 is complete when all of the following are true:
 - [ ] All error messages are user-friendly, not technical
 
 ### User Experience
-- [ ] All recording buttons are clearly labeled with icons
+- [ ] Single "Record" button replaces multiple recording buttons
 - [ ] Recording indicators (red dot, timer) are prominent and clear
 - [ ] Recordings complete within reasonable time (< 10 seconds processing for 5-min video)
 - [ ] UI remains responsive during recording
@@ -677,7 +773,7 @@ Phase 2 is complete when all of the following are true:
 
 **Order of Implementation:**
 1. Complete Phase 2.1 (Screen Recording) first - it's the foundation
-2. Complete Phase 2.2 (Webcam Recording) second - reuses screen recording patterns
+2. Complete Phase 2.2 (Webcam Recording + Unified UX) second - builds on screen recording
 3. Complete Phase 2.3 (PiP) last - depends on both previous sections
 4. Phase 2.4 (Polish) can be done in parallel or at end
 
@@ -687,7 +783,7 @@ Phase 2 is complete when all of the following are true:
 
 **Known Limitations for MVP:**
 - WebM format only - no direct MP4 recording (conversion required for compatibility)
-- Fixed PiP position (bottom-right corner) - no drag-and-drop repositioning
+- PiP position selected during recording - no timeline repositioning for MVP
 - Single webcam audio track - no mixing with screen audio in PiP export
 - Recording duration not limited - user can record until disk full
 - No pause/resume functionality - only start/stop
@@ -714,16 +810,16 @@ Phase 2 is complete when all of the following are true:
 
 **Manual Testing (Primary for Demo):**
 1. **Happy Path Tests:**
-   - Record 30-second screen capture → verify in media library
-   - Record 30-second webcam → verify video and audio
-   - Record screen + webcam → verify PiP export works
+   - Use unified modal to record 30-second screen capture → verify in media library
+   - Use unified modal to record 30-second webcam → verify video and audio
+   - Use unified modal to record screen + webcam with different PiP configs → verify export works
    - Complete full workflow: record → edit → export → verify output
 
 2. **Error Scenario Tests:**
    - Deny permissions → see helpful errors
    - Disconnect webcam during recording → graceful failure
    - Fill disk space → warning before recording
-   - Start multiple recordings quickly → no conflicts
+   - Start recording, go back, select different type → no conflicts
 
 3. **Performance Tests:**
    - Record 5-minute video → file size < 200MB
@@ -736,8 +832,8 @@ Phase 2 is complete when all of the following are true:
 - E2E test: Full recording workflow with Playwright
 
 **Demo Preparation Tests:**
-- Record sample screen + webcam video for demo presentation
-- Practice complete workflow: record → minor edit → export
+- Record sample screen + webcam video with different PiP positions for demo
+- Practice complete workflow: unified modal → select type → record → export
 - Verify exported video quality acceptable for demo
 - Test on actual presentation laptop (not just dev machine)
 
@@ -746,6 +842,7 @@ Phase 2 is complete when all of the following are true:
 ## Performance Targets
 
 **Recording Performance:**
+- Unified modal opens within 500ms
 - Screen recording starts within 2 seconds of source selection
 - Webcam preview appears within 1 second of permission grant
 - PiP recording starts both streams within 3 seconds
@@ -795,16 +892,16 @@ Phase 2 is complete when all of the following are true:
 
 Phase 2 is successful if:
 
-1. **Functional Completeness:** All three recording modes work reliably
+1. **Functional Completeness:** All three recording modes work reliably through unified modal
 2. **Demo Quality:** Recordings are high enough quality for impressive demo
-3. **User Experience:** Recording flow is intuitive, no confusing errors
+3. **User Experience:** Single "Record" button with clear step-based flow is intuitive
 4. **Performance:** Recordings complete in reasonable time, no crashes
 5. **MVP Readiness:** Feature is polished enough for Tuesday 10:59 PM checkpoint
 
 **Demo Script Validation:**
-- "Watch me record my screen..." → works smoothly
-- "Now let me add webcam..." → transitions seamlessly
-- "And export with picture-in-picture..." → output looks professional
+- "Watch me click Record and choose what to record..." → unified modal impresses
+- "I'll record my screen with webcam in the corner..." → PiP config is smooth
+- "And export with the webcam overlay..." → output looks professional
 - Total demo time for recording feature: < 3 minutes
 
-**Key Metric:** Can a new user record screen + webcam and export a video in under 5 minutes without any documentation?
+**Key Metric:** Can a new user record screen + webcam with PiP and export a video in under 5 minutes without any documentation?

@@ -33,6 +33,15 @@ export interface MediaFile {
 
   // NEW: Waveform data for visualization (optional)
   waveformData?: number[];           // Amplitude samples (0-1 range)
+
+  // NEW: Recording metadata (optional)
+  isRecording?: boolean;             // True if this file came from a recording
+  recordingType?: 'screen' | 'webcam' | 'pip';  // Type of recording
+  linkedRecordingId?: string;        // ID of linked recording (for screen+webcam pairs)
+  pipConfig?: {                      // PiP configuration (for webcam recordings)
+    position: string;                // 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left'
+    size: string;                    // 'small' | 'medium' | 'large'
+  };
 }
 
 /**

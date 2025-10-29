@@ -368,6 +368,27 @@ const TimelineClipView: React.FC<TimelineClipViewProps> = ({
         </div>
       )}
 
+      {/* PiP indicator badge (for overlay clips) */}
+      {clip.position && clip.scale && width > 80 && (
+        <div
+          style={{
+            position: 'absolute',
+            left: '4px',
+            bottom: '4px',
+            background: 'rgba(99, 102, 241, 0.9)',
+            borderRadius: '3px',
+            padding: '2px 6px',
+            fontSize: '0.6rem',
+            fontWeight: 700,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '3px',
+          }}
+        >
+          📹 PiP
+        </div>
+      )}
+
       {/* Selection indicator */}
       {isSelected && (
         <div

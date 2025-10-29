@@ -69,6 +69,7 @@ const MediaItem: React.FC<MediaItemProps> = ({ mediaFile, onClick }) => {
           justifyContent: 'center',
           border: '1px solid #2a2a2a',
           boxShadow: '0 1px 3px rgba(0, 0, 0, 0.3)',
+          position: 'relative',
         }}
       >
         {mediaFile.type === MediaType.AUDIO ? (
@@ -91,6 +92,59 @@ const MediaItem: React.FC<MediaItemProps> = ({ mediaFile, onClick }) => {
               objectFit: 'cover',
             }}
           />
+        )}
+
+        {/* Recording Badge */}
+        {mediaFile.isRecording && (
+          <div
+            style={{
+              position: 'absolute',
+              bottom: '4px',
+              right: '4px',
+              backgroundColor: mediaFile.recordingType === 'webcam'
+                ? 'rgba(99, 102, 241, 0.95)' // Blue for webcam
+                : 'rgba(239, 68, 68, 0.95)', // Red for screen
+              color: 'white',
+              borderRadius: '4px',
+              padding: '2px 6px',
+              fontSize: '0.65rem',
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '3px',
+              boxShadow: '0 2px 4px rgba(0, 0, 0, 0.3)',
+            }}
+          >
+            {mediaFile.recordingType === 'webcam' ? (
+              // Webcam icon
+              <>
+                <svg
+                  width="8"
+                  height="8"
+                  viewBox="0 0 24 24"
+                  fill="white"
+                  style={{ flexShrink: 0 }}
+                >
+                  <circle cx="12" cy="10" r="8" />
+                  <path d="M12 18 L16 22 L8 22 Z" />
+                </svg>
+                CAM
+              </>
+            ) : (
+              // Screen recording dot
+              <>
+                <div
+                  style={{
+                    width: '6px',
+                    height: '6px',
+                    backgroundColor: 'white',
+                    borderRadius: '50%',
+                  }}
+                />
+                REC
+              </>
+            )}
+          </div>
         )}
       </div>
 

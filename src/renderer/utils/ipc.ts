@@ -148,6 +148,132 @@ export async function saveRecordingFile(data: Uint8Array): Promise<string> {
 }
 
 /**
+ * Import recording to media library
+ * @param recordingPath - Path to the recording file in temp directory
+ * @param recordingType - Type of recording ('screen' | 'webcam' | 'pip')
+ * @returns MediaFile object with complete metadata
+ */
+export async function importRecording(recordingPath: string, recordingType: 'screen' | 'webcam' | 'pip' = 'screen'): Promise<MediaFile> {
+  try {
+    const mediaFile: MediaFile = await ipcRenderer.invoke('recording:import', recordingPath, recordingType);
+    return mediaFile;
+  } catch (error) {
+    console.error('Error importing recording:', error);
+    throw error;
+  }
+}
+
+/**
+ * Start combined recording (screen + webcam) for Picture-in-Picture
+ * @param screenSourceId - Desktop source ID for screen recording
+ * @param pipConfig - Picture-in-Picture configuration
+ * @returns Recording info for both streams
+ */
+export async function startCombinedRecording(
+  screenSourceId: string,
+  pipConfig: any
+): Promise<{
+  screenRecordingId: string;
+  webcamRecordingId: string;
+  screenSourceId: string;
+}> {
+  try {
+    const result = await ipcRenderer.invoke('recording:start-combined', screenSourceId, pipConfig);
+    return result;
+  } catch (error) {
+    console.error('Error starting combined recording:', error);
+    throw error;
+  }
+}
+
+/**
+ * Stop active combined recording
+ * @returns Output file paths and PiP config
+ */
+export async function stopCombinedRecording(): Promise<{
+  screenPath: string;
+  webcamPath: string;
+  pipConfig: any;
+}> {
+  try {
+    const result = await ipcRenderer.invoke('recording:stop-combined');
+    return result;
+  } catch (error) {
+    console.error('Error stopping combined recording:', error);
+    throw error;
+  }
+}
+
+/**
+ * Save both recording blobs to file system
+ * @param screenData - Screen recording data as Uint8Array
+ * @param webcamData - Webcam recording data as Uint8Array
+ * @returns Paths to both saved files
+ */
+export async function saveCombinedRecordingFiles(
+  screenData: Uint8Array,
+  webcamData: Uint8Array
+): Promise<{ screenPath: string; webcamPath: string }> {
+  try {
+    const result = await ipcRenderer.invoke('recording:save-combined-files', screenData, webcamData);
+    return result;
+  } catch (error) {
+    console.error('Error saving combined recording files:', error);
+    throw error;
+  }
+}
+
+/**
+ * Import combined recording to media library
+ * @param screenPath - Path to screen recording file
+ * @param webcamPath - Path to webcam recording file
+ * @param pipConfig - Picture-in-Picture configuration
+ * @returns Both MediaFile objects linked together
+ */
+export async function importCombinedRecording(
+  screenPath: string,
+  webcamPath: string,
+  pipConfig: { position: string; size: string }
+): Promise<{ screenMedia: any; webcamMedia: any }> {
+  try {
+    const result = await ipcRenderer.invoke('recording:import-combined', screenPath, webcamPath, pipConfig);
+    return result;
+  } catch (error) {
+    console.error('Error importing combined recording:', error);
+    throw error;
+  }
+}
+
+/**
+ * Composite PiP recording by overlaying webcam on screen video
+ * Creates a single unified video file with webcam picture-in-picture
+ * @param screenPath - Path to screen recording file
+ * @param webcamPath - Path to webcam recording file
+ * @param pipConfig - PiP configuration (position and size)
+ * @param outputPath - Path to save the composited video
+ * @returns Path to the composited file
+ */
+export async function compositePiPRecording(
+  screenPath: string,
+  webcamPath: string,
+  pipConfig: { position: string; size: string },
+  outputPath: string
+): Promise<string> {
+  try {
+    const result = await ipcRenderer.invoke('recording:composite-pip', {
+      screenPath,
+      webcamPath,
+      pipConfig,
+      outputPath
+    });
+    return result;
+  } catch (error) {
+    console.error('Error compositing PiP recording:', error);
+    throw error;
+  }
+}
+
+/**
  * Opens native save file dialog for video export
  * @returns Selected file path or null if cancelled
  */

@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { getDesktopSources, startRecording, stopRecording, saveRecordingFile } from '../utils/ipc';
+import { getDesktopSources, startRecording, stopRecording, saveRecordingFile, importRecording } from '../utils/ipc';
 import { DesktopSource, RecordingState } from '../../types/recording';
 import { Z_INDEX } from '../styles/zIndex';
 import { MediaRecorderService } from '../services/MediaRecorderService';
+import { useMediaStore } from '../store/mediaStore';
 
 interface RecordingModalProps {
   isOpen: boolean;
@@ -16,9 +17,11 @@ const RecordingModal: React.FC<RecordingModalProps> = ({ isOpen, onClose }) => {
   const [selectedSource, setSelectedSource] = useState<string | null>(null);
   const [recordingState, setRecordingState] = useState<RecordingState>('idle');
   const [elapsedTime, setElapsedTime] = useState(0);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const mediaRecorderRef = useRef<MediaRecorderService | null>(null);
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const addMediaFile = useMediaStore((state) => state.addMediaFile);
 
   // Fetch desktop sources when modal opens
   useEffect(() => {
@@ -124,8 +127,22 @@ const RecordingModal: React.FC<RecordingModalProps> = ({ isOpen, onClose }) => {
       // Stop recording in main process
       await stopRecording();
 
-      // Success! Close modal
-      onClose();
+      // Import recording to media library
+      console.log('RecordingModal: Importing recording to media library...');
+      const mediaFile = await importRecording(filePath);
+      console.log('RecordingModal: Recording imported:', mediaFile);
+
+      // Add to media store
+      addMediaFile(mediaFile);
+
+      // Show success message
+      setSuccessMessage('Recording added to library');
+      setRecordingState('idle');
+
+      // Auto-close modal after 2 seconds
+      setTimeout(() => {
+        onClose();
+      }, 2000);
     } catch (err) {
       console.error('RecordingModal: Error stopping recording:', err);
       setError(err instanceof Error ? err.message : 'Failed to stop recording');
@@ -309,7 +326,7 @@ const RecordingModal: React.FC<RecordingModalProps> = ({ isOpen, onClose }) => {
           )}
 
           {/* Processing UI */}
-          {recordingState === 'processing' && (
+          {recordingState === 'processing' && !successMessage && (
             <div
               style={{
                 display: 'flex',
@@ -331,7 +348,7 @@ const RecordingModal: React.FC<RecordingModalProps> = ({ isOpen, onClose }) => {
                   marginBottom: '16px',
                 }}
               />
-              <p style={{ margin: 0, fontSize: '0.9rem' }}>Saving recording...</p>
+              <p style={{ margin: 0, fontSize: '0.9rem' }}>Processing recording...</p>
               <style>
                 {`
                   @keyframes spin {
@@ -339,6 +356,58 @@ const RecordingModal: React.FC<RecordingModalProps> = ({ isOpen, onClose }) => {
                   }
                 `}
               </style>
+            </div>
+          )}
+
+          {/* Success UI */}
+          {successMessage && (
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '60px 0',
+              }}
+            >
+              {/* Success checkmark */}
+              <div
+                style={{
+                  width: '80px',
+                  height: '80px',
+                  backgroundColor: '#10b981',
+                  borderRadius: '50%',
+                  marginBottom: '24px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '3rem',
+                  boxShadow: '0 0 20px rgba(16, 185, 129, 0.5)',
+                }}
+              >
+                ✓
+              </div>
+
+              {/* Success Message */}
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: '1.125rem',
+                  color: '#f1f5f9',
+                  fontWeight: 600,
+                }}
+              >
+                {successMessage}
+              </p>
+              <p
+                style={{
+                  margin: '8px 0 0 0',
+                  fontSize: '0.875rem',
+                  color: '#94a3b8',
+                }}
+              >
+                Closing in 2 seconds...
+              </p>
             </div>
           )}
 

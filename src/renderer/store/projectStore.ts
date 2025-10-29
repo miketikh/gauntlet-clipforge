@@ -11,6 +11,25 @@ import { useMediaStore } from './mediaStore';
 import { migrateProject } from '../utils/projectMigration';
 
 /**
+ * Map PiP position string to percentage coordinates
+ */
+const PIP_POSITION_MAP: Record<string, { x: number; y: number }> = {
+  'bottom-right': { x: 75, y: 75 },
+  'bottom-left': { x: 5, y: 75 },
+  'top-right': { x: 75, y: 5 },
+  'top-left': { x: 5, y: 5 },
+};
+
+/**
+ * Map PiP size string to scale decimal
+ */
+const PIP_SIZE_MAP: Record<string, number> = {
+  small: 0.20,
+  medium: 0.25,
+  large: 0.30,
+};
+
+/**
  * Command pattern structure for edit history
  */
 export interface EditCommand {
@@ -49,6 +68,14 @@ interface ProjectState {
   setClipFades: (clipId: string, fadeIn: number, fadeOut: number) => void;
   setTrackVolume: (trackId: string, volume: number) => void;
   setTrackMuted: (trackId: string, muted: boolean) => void;
+
+  // PiP recording actions
+  addPiPRecording: (
+    screenMediaId: string,
+    webcamMediaId: string,
+    pipConfig: { position: string; size: string },
+    linkedRecordingId: string
+  ) => void;
 }
 
 export const useProjectStore = create<ProjectState>()(
@@ -329,6 +356,122 @@ export const useProjectStore = create<ProjectState>()(
           }
         });
         console.log('[ProjectStore] Set track muted:', trackId, muted);
+      },
+
+      /**
+       * Add PiP recording to timeline
+       * Places screen recording on Track 0 (main) and webcam on Track 1 (overlay)
+       * @param screenMediaId - ID of screen recording media file
+       * @param webcamMediaId - ID of webcam recording media file
+       * @param pipConfig - PiP configuration (position and size)
+       * @param linkedRecordingId - Shared ID linking the two recordings
+       */
+      addPiPRecording: (
+        screenMediaId: string,
+        webcamMediaId: string,
+        pipConfig: { position: string; size: string },
+        linkedRecordingId: string
+      ) => {
+        const state = get();
+        if (!state.currentProject) {
+          console.error('[ProjectStore] No project loaded - cannot add PiP recording');
+          return;
+        }
+
+        // Get media files from media store
+        const mediaStore = useMediaStore.getState();
+        const screenMedia = mediaStore.mediaFiles.find((f) => f.id === screenMediaId);
+        const webcamMedia = mediaStore.mediaFiles.find((f) => f.id === webcamMediaId);
+
+        if (!screenMedia || !webcamMedia) {
+          console.error('[ProjectStore] Media files not found for PiP recording');
+          return;
+        }
+
+        console.log('[ProjectStore] Adding PiP recording to timeline');
+        console.log(`[ProjectStore] Screen: ${screenMedia.filename}, Webcam: ${webcamMedia.filename}`);
+        console.log(`[ProjectStore] PiP config:`, pipConfig);
+
+        // Get current timeline end position (or 0 if empty)
+        const currentDuration = get().getProjectDuration();
+        const startPosition = currentDuration;
+
+        // Use the longer duration for both clips (they should be similar)
+        const clipDuration = Math.max(screenMedia.duration, webcamMedia.duration);
+
+        // Map PiP position and size to clip properties
+        const position = PIP_POSITION_MAP[pipConfig.position] || { x: 75, y: 75 };
+        const scale = PIP_SIZE_MAP[pipConfig.size] || 0.25;
+
+        // Create screen clip for Track 0 (main video track)
+        const screenClip: TimelineClip = {
+          id: `clip-screen-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          mediaFileId: screenMediaId,
+          trackIndex: 0,
+          startTime: startPosition,
+          endTime: startPosition + clipDuration,
+          trimStart: 0,
+          trimEnd: 0,
+          linkedRecordingId,
+        };
+
+        // Create webcam clip for Track 1 (overlay track) with PiP positioning
+        const webcamClip: TimelineClip = {
+          id: `clip-webcam-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          mediaFileId: webcamMediaId,
+          trackIndex: 1,
+          startTime: startPosition,
+          endTime: startPosition + clipDuration,
+          trimStart: 0,
+          trimEnd: 0,
+          position,
+          scale,
+          linkedRecordingId,
+        };
+
+        // Ensure we have at least 2 tracks (Main and Overlay)
+        const tracks = [...state.currentProject.tracks];
+
+        // If we don't have Track 1, create it
+        if (tracks.length < 2) {
+          tracks.push({
+            id: `track-1-${Date.now()}`,
+            name: 'Overlay 1',
+            clips: [],
+            type: TrackType.OVERLAY,
+          });
+        }
+
+        // Add clips to their respective tracks
+        const updatedTracks = tracks.map((track, index) => {
+          if (index === 0) {
+            // Add screen clip to Track 0
+            return {
+              ...track,
+              clips: [...track.clips, screenClip].sort(
+                (a, b) => a.startTime - b.startTime
+              ),
+            };
+          } else if (index === 1) {
+            // Add webcam clip to Track 1
+            return {
+              ...track,
+              clips: [...track.clips, webcamClip].sort(
+                (a, b) => a.startTime - b.startTime
+              ),
+            };
+          }
+          return track;
+        });
+
+        const updatedProject = {
+          ...state.currentProject,
+          tracks: updatedTracks,
+          duration: calculateProjectDuration(updatedTracks),
+        };
+
+        set({ currentProject: updatedProject });
+        console.log('[ProjectStore] PiP recording added to timeline successfully');
       },
     }),
     {

@@ -3,7 +3,7 @@ import * as os from 'os';
 import { Project } from '../../types/timeline';
 import { MediaFile } from '../../types/media';
 import { FFmpegExportConfig } from './ExportService';
-import { spawn } from 'child_process';
+import { spawn, ChildProcess } from 'child_process';
 
 /**
  * VideoProcessor - Service class for FFmpeg video processing operations
@@ -129,6 +129,59 @@ export class VideoProcessor {
           console.error('Error extracting thumbnail:', err.message);
           reject(new Error(`Failed to extract thumbnail: ${err.message}`));
         });
+    });
+  }
+
+  /**
+   * Fix WebM metadata by remuxing the file with FFmpeg
+   * MediaRecorder API creates WebM files without duration metadata,
+   * causing playback issues. This remuxes the file without re-encoding.
+   * @param inputPath - Path to input WebM file
+   * @param outputPath - Path to output WebM file with fixed metadata
+   * @returns Promise that resolves when remuxing is complete
+   */
+  async fixWebMMetadata(inputPath: string, outputPath: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (!this.ffmpegPath) {
+        reject(new Error('FFmpeg path not configured'));
+        return;
+      }
+
+      console.log(`[VideoProcessor] Fixing WebM metadata: ${inputPath} -> ${outputPath}`);
+
+      // Use spawn to run FFmpeg with -c copy (no re-encoding) and -movflags +faststart
+      const args = [
+        '-i', inputPath,
+        '-c', 'copy',
+        '-movflags', '+faststart',
+        '-y', // Overwrite output file if exists
+        outputPath
+      ];
+
+      const ffmpegProcess = spawn(this.ffmpegPath, args, {
+        stdio: ['pipe', 'pipe', 'pipe']
+      });
+
+      let stderr = '';
+
+      ffmpegProcess.stderr?.on('data', (data) => {
+        stderr += data.toString();
+      });
+
+      ffmpegProcess.on('close', (code) => {
+        if (code === 0) {
+          console.log('[VideoProcessor] WebM metadata fixed successfully');
+          resolve();
+        } else {
+          console.error('[VideoProcessor] FFmpeg stderr:', stderr);
+          reject(new Error(`FFmpeg exited with code ${code} while fixing WebM metadata`));
+        }
+      });
+
+      ffmpegProcess.on('error', (err) => {
+        console.error('[VideoProcessor] FFmpeg process error:', err);
+        reject(new Error(`Failed to start FFmpeg: ${err.message}`));
+      });
     });
   }
 
@@ -368,6 +421,122 @@ export class VideoProcessor {
       this.currentExportProcess.kill('SIGKILL');
       this.currentExportProcess = null;
     }
+  }
+
+  /**
+   * Composite PiP recording by overlaying webcam on screen video
+   * Creates a single unified video file with webcam picture-in-picture
+   * @param screenPath - Path to screen recording file
+   * @param webcamPath - Path to webcam recording file
+   * @param pipConfig - PiP configuration (position and size)
+   * @param outputPath - Path to save the composited video
+   * @returns Promise that resolves when compositing is complete
+   */
+  async compositePiPRecording(
+    screenPath: string,
+    webcamPath: string,
+    pipConfig: { position: string; size: string },
+    outputPath: string
+  ): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (!this.ffmpegPath) {
+        reject(new Error('FFmpeg path not configured'));
+        return;
+      }
+
+      console.log(`[VideoProcessor] Compositing PiP recording: ${screenPath} + ${webcamPath} -> ${outputPath}`);
+      console.log(`[VideoProcessor] PiP config:`, pipConfig);
+
+      // Map PiP size to scale percentage
+      const sizeMap: Record<string, number> = {
+        small: 0.2,   // 20%
+        medium: 0.25, // 25%
+        large: 0.3    // 30%
+      };
+      const scale = sizeMap[pipConfig.size] || 0.25;
+
+      // Map position to overlay coordinates
+      // Positions are defined as: 'bottom-right', 'bottom-left', 'top-right', 'top-left'
+      const padding = 20; // pixels from edge
+      let overlayX: string;
+      let overlayY: string;
+
+      switch (pipConfig.position) {
+        case 'bottom-right':
+          overlayX = `W-w-${padding}`;
+          overlayY = `H-h-${padding}`;
+          break;
+        case 'bottom-left':
+          overlayX = `${padding}`;
+          overlayY = `H-h-${padding}`;
+          break;
+        case 'top-right':
+          overlayX = `W-w-${padding}`;
+          overlayY = `${padding}`;
+          break;
+        case 'top-left':
+          overlayX = `${padding}`;
+          overlayY = `${padding}`;
+          break;
+        default:
+          // Default to bottom-right
+          overlayX = `W-w-${padding}`;
+          overlayY = `H-h-${padding}`;
+      }
+
+      console.log(`[VideoProcessor] Overlay position: x=${overlayX}, y=${overlayY}, scale=${scale}`);
+
+      // Build FFmpeg arguments
+      // Strategy: Scale webcam to PiP size, then overlay on screen video
+      const filterComplex = `[1:v]scale=iw*${scale}:ih*${scale}[pip];[0:v][pip]overlay=${overlayX}:${overlayY}[vout]`;
+
+      const args = [
+        '-i', screenPath,  // Input 0: screen recording (no audio)
+        '-i', webcamPath,  // Input 1: webcam recording (has audio)
+        '-filter_complex', filterComplex,
+        '-map', '[vout]',  // Map composited video
+        '-map', '1:a',     // Map audio from webcam (screen has no audio)
+        '-c:v', 'libx264', // Video codec
+        '-preset', 'medium',
+        '-crf', '23',
+        '-pix_fmt', 'yuv420p',
+        '-c:a', 'aac',     // Encode audio to AAC for MP4 compatibility
+        '-b:a', '128k',    // Audio bitrate
+        '-y',              // Overwrite output file
+        outputPath
+      ];
+
+      console.log('[VideoProcessor] FFmpeg command:', this.ffmpegPath, args.join(' '));
+
+      // Spawn FFmpeg process
+      const ffmpegProcess = spawn(this.ffmpegPath, args, {
+        stdio: ['pipe', 'pipe', 'pipe']
+      });
+
+      let stderr = '';
+
+      // Capture stderr for debugging
+      ffmpegProcess.stderr?.on('data', (data) => {
+        stderr += data.toString();
+      });
+
+      // Handle process completion
+      ffmpegProcess.on('close', (code) => {
+        if (code === 0) {
+          console.log('[VideoProcessor] PiP compositing completed successfully');
+          resolve();
+        } else {
+          console.error('[VideoProcessor] FFmpeg stderr:', stderr);
+          reject(new Error(`FFmpeg exited with code ${code} while compositing PiP recording`));
+        }
+      });
+
+      // Handle process errors
+      ffmpegProcess.on('error', (err) => {
+        console.error('[VideoProcessor] FFmpeg process error:', err);
+        reject(new Error(`Failed to start FFmpeg: ${err.message}`));
+      });
+    });
   }
 
   /**

@@ -2,6 +2,7 @@ import { ipcMain, dialog, BrowserWindow, shell } from 'electron';
 import { VideoProcessor } from '../services/VideoProcessor';
 import { MediaFile, VideoMetadata, MediaType } from '../../types/media';
 import { recordingService } from '../services/RecordingService';
+import { MediaService } from '../services/MediaService';
 import { ExportService } from '../services/ExportService';
 import { ExportConfig } from '../../renderer/store/exportStore';
 import { Project } from '../../types/timeline';
@@ -11,6 +12,7 @@ import * as os from 'os';
 import { v4 as uuidv4 } from 'uuid';
 
 const videoProcessor = new VideoProcessor();
+const mediaService = new MediaService(videoProcessor);
 let exportService: ExportService | null = null;
 
 /**
@@ -310,6 +312,148 @@ export function registerIpcHandlers(mainWindow?: BrowserWindow) {
     } catch (error) {
       console.error('Error in recording:save-file handler:', error);
       throw new Error(`Failed to save recording file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  });
+
+  /**
+   * Handle 'recording:import' - Import recording to media library
+   * @param recordingPath - Path to the recording file in temp directory
+   * @param recordingType - Type of recording ('screen' | 'webcam' | 'pip')
+   * Returns: MediaFile object with complete metadata
+   */
+  ipcMain.handle('recording:import', async (_event, recordingPath: string, recordingType: 'screen' | 'webcam' | 'pip' = 'screen') => {
+    try {
+      console.log(`IPC: Importing ${recordingType} recording from ${recordingPath}`);
+      const mediaFile = await mediaService.importRecording(recordingPath, recordingType);
+      console.log(`IPC: Recording imported successfully: ${mediaFile.filename}`);
+      return mediaFile;
+    } catch (error) {
+      console.error('Error in recording:import handler:', error);
+      throw new Error(`Failed to import recording: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  });
+
+  /**
+   * Handle 'recording:import-combined' - Import combined recording to media library
+   * @param screenPath - Path to screen recording file
+   * @param webcamPath - Path to webcam recording file
+   * @param pipConfig - Picture-in-Picture configuration
+   * Returns: Both MediaFile objects linked together
+   */
+  ipcMain.handle('recording:import-combined', async (_event, screenPath: string, webcamPath: string, pipConfig: any) => {
+    try {
+      console.log(`IPC: Importing combined recording - Screen: ${screenPath}, Webcam: ${webcamPath}`);
+      const result = await mediaService.importCombinedRecording(screenPath, webcamPath, pipConfig);
+      console.log(`IPC: Combined recording imported successfully`);
+      return result;
+    } catch (error) {
+      console.error('Error in recording:import-combined handler:', error);
+      throw new Error(`Failed to import combined recording: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  });
+
+  /**
+   * Handle 'recording:start-combined' - Start combined screen + webcam recording
+   * @param screenSourceId - Desktop source ID for screen recording
+   * @param pipConfig - Picture-in-Picture configuration
+   * Returns: Recording info for both streams
+   */
+  ipcMain.handle('recording:start-combined', async (_event, screenSourceId: string, pipConfig: any) => {
+    try {
+      console.log(`IPC: Starting combined recording for source ${screenSourceId}`);
+      const result = await recordingService.startCombinedRecording(screenSourceId, pipConfig);
+      console.log(`IPC: Combined recording started - Screen: ${result.screenRecordingId}, Webcam: ${result.webcamRecordingId}`);
+      return result;
+    } catch (error) {
+      console.error('Error in recording:start-combined handler:', error);
+      throw new Error(`Failed to start combined recording: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  });
+
+  /**
+   * Handle 'recording:stop-combined' - Stop active combined recording
+   * Returns: Output file paths and PiP config
+   */
+  ipcMain.handle('recording:stop-combined', async () => {
+    try {
+      console.log('IPC: Stopping combined recording...');
+      const result = await recordingService.stopCombinedRecording();
+      console.log(`IPC: Combined recording stopped - Screen: ${result.screenPath}, Webcam: ${result.webcamPath}`);
+      return result;
+    } catch (error) {
+      console.error('Error in recording:stop-combined handler:', error);
+      throw new Error(`Failed to stop combined recording: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  });
+
+  /**
+   * Handle 'recording:save-combined-files' - Save both recording blobs to file system
+   * @param screenBuffer - Buffer containing screen recording data
+   * @param webcamBuffer - Buffer containing webcam recording data
+   * Returns: Paths to both saved files
+   */
+  ipcMain.handle('recording:save-combined-files', async (_event, screenBuffer: Buffer, webcamBuffer: Buffer) => {
+    try {
+      console.log(`IPC: Saving combined recording files - Screen: ${screenBuffer.length} bytes, Webcam: ${webcamBuffer.length} bytes`);
+
+      const activeCombinedRecording = recordingService.getActiveCombinedRecording();
+      if (!activeCombinedRecording) {
+        throw new Error('No active combined recording to save');
+      }
+
+      const screenPath = activeCombinedRecording.screenOutputPath;
+      const webcamPath = activeCombinedRecording.webcamOutputPath;
+
+      // Ensure directory exists
+      const dir = path.dirname(screenPath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+
+      // Write both buffers to files
+      fs.writeFileSync(screenPath, screenBuffer);
+      fs.writeFileSync(webcamPath, webcamBuffer);
+
+      console.log(`IPC: Screen recording saved to ${screenPath} (${fs.statSync(screenPath).size} bytes)`);
+      console.log(`IPC: Webcam recording saved to ${webcamPath} (${fs.statSync(webcamPath).size} bytes)`);
+
+      return { screenPath, webcamPath };
+    } catch (error) {
+      console.error('Error in recording:save-combined-files handler:', error);
+      throw new Error(`Failed to save combined recording files: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  });
+
+  /**
+   * Handle 'recording:composite-pip' - Composite screen and webcam into single PiP video
+   * @param screenPath - Path to screen recording file
+   * @param webcamPath - Path to webcam recording file
+   * @param pipConfig - PiP configuration (position and size)
+   * @param outputPath - Path to save composited video
+   * Returns: Path to the composited file
+   */
+  ipcMain.handle('recording:composite-pip', async (_event, data: {
+    screenPath: string;
+    webcamPath: string;
+    pipConfig: { position: string; size: string };
+    outputPath: string;
+  }) => {
+    try {
+      console.log(`IPC: Compositing PiP recording - Screen: ${data.screenPath}, Webcam: ${data.webcamPath}`);
+      console.log(`IPC: Output path: ${data.outputPath}`);
+
+      await videoProcessor.compositePiPRecording(
+        data.screenPath,
+        data.webcamPath,
+        data.pipConfig,
+        data.outputPath
+      );
+
+      console.log(`IPC: PiP compositing completed: ${data.outputPath}`);
+      return data.outputPath;
+    } catch (error) {
+      console.error('Error in recording:composite-pip handler:', error);
+      throw new Error(`Failed to composite PiP recording: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   });
 

@@ -199,8 +199,156 @@ export class ExportService {
   }
 
   /**
+   * Detect if timeline has PiP layout (screen on Track 0, webcam on Track 1)
+   */
+  private detectPiPLayout(project: Project): boolean {
+    // Check if we have clips on both Track 0 and Track 1
+    const track0 = project.tracks.find(t => t.clips.some(c => c.trackIndex === 0));
+    const track1 = project.tracks.find(t => t.clips.some(c => c.trackIndex === 1));
+
+    if (!track0 || !track1) {
+      return false;
+    }
+
+    // Check if Track 1 has clips with position and scale properties (PiP metadata)
+    const track1Clips = project.tracks.flatMap(t => t.clips.filter(c => c.trackIndex === 1));
+    return track1Clips.some(clip => clip.position && clip.scale !== undefined);
+  }
+
+  /**
+   * Generate specialized FFmpeg filter graph for PiP layout
+   * Handles screen recording on Track 0 and webcam overlay on Track 1
+   */
+  private generatePiPFilterGraph(
+    project: Project,
+    config: FFmpegExportConfig,
+    mediaFiles: MediaFile[]
+  ): string {
+    const filters: string[] = [];
+    const { width, height } = config;
+
+    // Get clips from both tracks
+    const screenClips = project.tracks
+      .flatMap(t => t.clips)
+      .filter(c => c.trackIndex === 0)
+      .sort((a, b) => a.startTime - b.startTime);
+
+    const webcamClips = project.tracks
+      .flatMap(t => t.clips)
+      .filter(c => c.trackIndex === 1)
+      .sort((a, b) => a.startTime - b.startTime);
+
+    console.log(`[ExportService] PiP export - Screen clips: ${screenClips.length}, Webcam clips: ${webcamClips.length}`);
+
+    // Track input indices (0 = black base, 1 = silent audio base, 2+ = media files)
+    // For PiP: 2 = screen video, 3 = webcam video
+    const screenInputIndex = 2;
+    const webcamInputIndex = 3;
+
+    // Get the first clip from each track to determine parameters
+    const screenClip = screenClips[0];
+    const webcamClip = webcamClips[0];
+
+    if (!screenClip || !webcamClip) {
+      console.warn('[ExportService] Missing screen or webcam clip in PiP layout');
+      throw new Error('PiP layout requires both screen and webcam clips');
+    }
+
+    // Get media files
+    const screenMedia = mediaFiles.find(f => f.id === screenClip.mediaFileId);
+    const webcamMedia = mediaFiles.find(f => f.id === webcamClip.mediaFileId);
+
+    if (!screenMedia || !webcamMedia) {
+      throw new Error('Could not find media files for PiP clips');
+    }
+
+    // Calculate trim parameters for screen
+    const screenTrimStart = screenClip.trimStart || 0;
+    const screenTrimEnd = screenClip.trimEnd || 0;
+    const screenDuration = screenMedia.duration - screenTrimStart - screenTrimEnd;
+    const screenStartTime = screenClip.startTime;
+
+    // Calculate trim parameters for webcam
+    const webcamTrimStart = webcamClip.trimStart || 0;
+    const webcamTrimEnd = webcamClip.trimEnd || 0;
+    const webcamDuration = webcamMedia.duration - webcamTrimStart - webcamTrimEnd;
+    const webcamStartTime = webcamClip.startTime;
+
+    // Get PiP positioning from webcam clip
+    const position = webcamClip.position || { x: 75, y: 75 }; // Default to bottom-right
+    const scale = webcamClip.scale || 0.25; // Default to 25%
+
+    // Calculate webcam overlay size
+    const webcamWidth = Math.round(width * scale);
+    const webcamHeight = Math.round(height * scale);
+
+    // Calculate overlay position with padding
+    const padding = 20; // pixels from edge
+    let overlayX: number;
+    let overlayY: number;
+
+    // Convert percentage position to pixel coordinates
+    // Position percentages represent where the overlay starts
+    if (position.x < 50) {
+      // Left side
+      overlayX = padding;
+    } else {
+      // Right side (subtract overlay width and padding)
+      overlayX = width - webcamWidth - padding;
+    }
+
+    if (position.y < 50) {
+      // Top side
+      overlayY = padding;
+    } else {
+      // Bottom side (subtract overlay height and padding)
+      overlayY = height - webcamHeight - padding;
+    }
+
+    console.log(`[ExportService] PiP overlay position: x=${overlayX}, y=${overlayY}, size=${webcamWidth}x${webcamHeight}`);
+
+    // STEP 1: Prepare screen video - trim, scale, and position on timeline
+    filters.push(
+      `[${screenInputIndex}:v]trim=start=${screenTrimStart}:duration=${screenDuration},setpts=PTS-STARTPTS+${screenStartTime}/TB,scale=${width}:${height}[screen]`
+    );
+
+    // STEP 2: Prepare webcam video - trim, scale to PiP size, and position on timeline
+    filters.push(
+      `[${webcamInputIndex}:v]trim=start=${webcamTrimStart}:duration=${webcamDuration},setpts=PTS-STARTPTS+${webcamStartTime}/TB,scale=${webcamWidth}:${webcamHeight}[webcam]`
+    );
+
+    // STEP 3: Overlay webcam on black base at the correct timeline position
+    // First, overlay screen on black base
+    const screenEndTime = screenStartTime + screenDuration;
+    filters.push(
+      `[0:v][screen]overlay=enable='between(t,${screenStartTime},${screenEndTime})'[base_with_screen]`
+    );
+
+    // Then, overlay webcam on top
+    const webcamEndTime = webcamStartTime + webcamDuration;
+    filters.push(
+      `[base_with_screen][webcam]overlay=x=${overlayX}:y=${overlayY}:enable='between(t,${webcamStartTime},${webcamEndTime})'[vout]`
+    );
+
+    // STEP 4: Handle audio - use screen audio only (mute webcam for MVP)
+    // Prepare screen audio with trim and delay
+    const screenStartTimeMs = screenStartTime * 1000;
+    filters.push(
+      `[${screenInputIndex}:a]atrim=start=${screenTrimStart}:duration=${screenDuration},asetpts=PTS-STARTPTS,adelay=${screenStartTimeMs}|${screenStartTimeMs}[screen_audio]`
+    );
+
+    // Mix screen audio with silent base
+    filters.push(
+      `[1:a][screen_audio]amix=inputs=2:duration=longest[aout]`
+    );
+
+    return filters.join(';');
+  }
+
+  /**
    * Generate FFmpeg filter_complex string
    * Uses black base + overlay approach to preserve timeline gaps
+   * Special handling for PiP layout (screen + webcam)
    */
   private generateFilterGraph(
     project: Project,
@@ -208,6 +356,15 @@ export class ExportService {
     mediaFiles: MediaFile[]
   ): string {
     const filters: string[] = [];
+
+    // Detect PiP layout
+    const isPiPLayout = this.detectPiPLayout(project);
+    console.log('[ExportService] PiP layout detected:', isPiPLayout);
+
+    if (isPiPLayout) {
+      // Use specialized PiP filter graph
+      return this.generatePiPFilterGraph(project, config, mediaFiles);
+    }
 
     // Track input index counter (0 = black base, 1 = silent audio base, 2+ = media files)
     let inputIndex = 2;

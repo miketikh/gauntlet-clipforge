@@ -130,6 +130,11 @@ const TimelineTrack: React.FC<TimelineTrackProps> = ({
       return trackIndex % 2 === 0
         ? 'linear-gradient(180deg, #1e2837 0%, #1a2333 100%)'
         : 'linear-gradient(180deg, #1a2333 0%, #151f2e 100%)';
+    } else if (track.type === TrackType.OVERLAY) {
+      // Overlay tracks: purple-tinted gradient to distinguish from main video
+      return trackIndex % 2 === 0
+        ? 'linear-gradient(180deg, #3d3550 0%, #342d45 100%)'
+        : 'linear-gradient(180deg, #342d45 0%, #2a2538 100%)';
     } else {
       // Video tracks: dark gray with subtle gradient
       return trackIndex % 2 === 0
@@ -144,7 +149,14 @@ const TimelineTrack: React.FC<TimelineTrackProps> = ({
   const dropHighlight = isOver && canDrop ? 'rgba(102, 126, 234, 0.2)' : 'transparent';
 
   // Generate track label with type indicator
-  const trackTypeLabel = track.type === TrackType.AUDIO ? '🎵 Audio' : '🎬 Video';
+  let trackTypeLabel: string;
+  if (track.type === TrackType.AUDIO) {
+    trackTypeLabel = '🎵 Audio';
+  } else if (track.type === TrackType.OVERLAY) {
+    trackTypeLabel = '📹 Overlay';
+  } else {
+    trackTypeLabel = '🎬 Video';
+  }
   const trackLabel = `${trackTypeLabel} - ${track.name}`;
 
   // Handle click on track area to seek playhead
