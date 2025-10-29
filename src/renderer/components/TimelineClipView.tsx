@@ -1,5 +1,6 @@
 import React, { useCallback, useState, useEffect, useRef } from 'react';
 import { useDrag } from 'react-dnd';
+import { getEmptyImage } from 'react-dnd-html5-backend';
 import { TimelineClip } from '../../types/timeline';
 import { MediaFile, MediaType } from '../../types/media';
 import { calculateClipDuration } from '../utils/timelineCalculations';
@@ -45,13 +46,18 @@ const TimelineClipView: React.FC<TimelineClipViewProps> = ({
   const isPlayheadOverClip = playheadPosition >= clip.startTime && playheadPosition <= clip.endTime;
 
   // Setup drag source for repositioning
-  const [{ isDragging }, drag] = useDrag(() => ({
+  const [{ isDragging }, drag, preview] = useDrag(() => ({
     type: 'TIMELINE_CLIP',
     item: { clipId: clip.id, clip, trackIndex: clip.trackIndex },
     collect: (monitor) => ({
       isDragging: monitor.isDragging(),
     }),
   }), [clip]);
+
+  // Hide the default drag preview (use ghost preview instead)
+  useEffect(() => {
+    preview(getEmptyImage(), { captureDraggingState: true });
+  }, [preview]);
 
   // Handle clip selection
   const handleClick = useCallback((e: React.MouseEvent) => {
