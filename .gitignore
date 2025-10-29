@@ -93,3 +93,6 @@ out/
 
 # Claude Code
 .claude/
+
+# MCP configuration (contains API keys)
+.mcp.json
