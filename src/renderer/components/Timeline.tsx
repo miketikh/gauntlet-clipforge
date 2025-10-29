@@ -108,6 +108,15 @@ const Timeline: React.FC = () => {
 
   // Handle keyboard events
   const handleKeyDown = useCallback(async (e: KeyboardEvent) => {
+    // Don't intercept keyboard shortcuts when user is typing in an input/textarea
+    const target = e.target as HTMLElement;
+    const isInputField = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA';
+
+    // Skip all shortcuts if user is typing (even modifier keys, to allow natural typing)
+    if (isInputField) {
+      return;
+    }
+
     // Zoom shortcuts - work globally (no need for selected clip)
     // Cmd/Ctrl + Plus/Equal - Zoom in
     if ((e.metaKey || e.ctrlKey) && (e.key === '+' || e.key === '=')) {

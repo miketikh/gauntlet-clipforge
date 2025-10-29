@@ -1,17 +1,23 @@
 import React, { useState, useCallback, useRef } from 'react';
+import { useAIAssistantStore } from '../store/aiAssistantStore';
 
 interface LayoutProps {
   header: React.ReactNode;
   mediaLibrary: React.ReactNode;
   preview: React.ReactNode;
   timeline: React.ReactNode;
+  aiPanel: React.ReactNode;
 }
 
-const Layout: React.FC<LayoutProps> = ({ header, mediaLibrary, preview, timeline }) => {
+const Layout: React.FC<LayoutProps> = ({ header, mediaLibrary, preview, timeline, aiPanel }) => {
   // Timeline height state (default 320px - enough for 2 tracks + controls)
   const [timelineHeight, setTimelineHeight] = useState(320);
   const [isDragging, setIsDragging] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // AI Panel state from Zustand store
+  const isPanelOpen = useAIAssistantStore((state) => state.isPanelOpen);
+  const panelWidth = useAIAssistantStore((state) => state.panelWidth);
 
   // Min/max constraints
   const MIN_TIMELINE_HEIGHT = 150;
@@ -76,17 +82,18 @@ const Layout: React.FC<LayoutProps> = ({ header, mediaLibrary, preview, timeline
       ref={containerRef}
       style={{
         display: 'grid',
-        gridTemplateColumns: '250px 1fr',
+        gridTemplateColumns: isPanelOpen ? `250px 1fr ${panelWidth}px` : '250px 1fr 50px',
         gridTemplateRows: `60px 1fr ${timelineHeight}px`,
         gridTemplateAreas: `
-          "header header"
-          "sidebar preview"
-          "timeline timeline"
+          "header header header"
+          "sidebar preview aiPanel"
+          "timeline timeline timeline"
         `,
         height: '100vh',
         width: '100vw',
         overflow: 'hidden',
         background: '#1a1a1a',
+        transition: 'grid-template-columns 0.3s ease',
       }}
     >
       <div style={{ gridArea: 'header', overflow: 'hidden' }}>
@@ -125,6 +132,9 @@ const Layout: React.FC<LayoutProps> = ({ header, mediaLibrary, preview, timeline
           }}
         />
         {timeline}
+      </div>
+      <div style={{ gridArea: 'aiPanel', overflow: 'hidden', minHeight: 0 }}>
+        {aiPanel}
       </div>
     </div>
   );

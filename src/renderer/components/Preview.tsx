@@ -147,11 +147,16 @@ const Preview: React.FC = () => {
   // Handle keyboard shortcuts
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
-      // Allow spacebar unless user is typing in an input/textarea
+      // Don't intercept keyboard shortcuts when user is typing in an input/textarea
       const target = e.target as HTMLElement;
       const isInputField = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA';
 
-      if (e.code === 'Space' && !isInputField) {
+      // Skip all shortcuts if user is typing
+      if (isInputField) {
+        return;
+      }
+
+      if (e.code === 'Space') {
         e.preventDefault();
         if (isPlaying) {
           pause();

@@ -6,6 +6,11 @@ import { MediaService } from '../services/MediaService';
 import { ExportService } from '../services/ExportService';
 import { ExportConfig } from '../../renderer/store/exportStore';
 import { Project } from '../../types/timeline';
+import { apiKeyStorage } from '../services/ApiKeyStorage';
+import { profileStorage } from '../services/ProfileStorage';
+import { UserProfile, Transcript, AnalysisResult } from '../../types/ai';
+import { audioExtractor } from '../services/AudioExtractor';
+import { videoAnalysisService } from '../services/VideoAnalysisService';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -604,6 +609,373 @@ export function registerIpcHandlers(mainWindow?: BrowserWindow) {
     } catch (error) {
       console.error('Error in open-export-file handler:', error);
       throw new Error(`Failed to open export file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  });
+
+  /**
+   * Handle 'ai:save-api-key' - Save OpenAI API key with encryption
+   * @param key - The API key string to encrypt and store
+   * Returns: Success confirmation
+   */
+  ipcMain.handle('ai:save-api-key', async (_event, key: string) => {
+    try {
+      console.log('IPC: Saving OpenAI API key...');
+      await apiKeyStorage.saveApiKey(key);
+      return { success: true };
+    } catch (error) {
+      console.error('Error in ai:save-api-key handler:', error);
+      throw new Error(`Failed to save API key: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  });
+
+  /**
+   * Handle 'ai:get-api-key' - Retrieve and decrypt stored API key
+   * Returns: Decrypted API key or null if not found
+   */
+  ipcMain.handle('ai:get-api-key', async () => {
+    try {
+      console.log('IPC: Retrieved API key');
+      const key = await apiKeyStorage.getApiKey();
+      return key;
+    } catch (error) {
+      console.error('Error in ai:get-api-key handler:', error);
+      throw new Error(`Failed to get API key: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  });
+
+  /**
+   * Handle 'ai:has-api-key' - Check if API key exists
+   * Returns: Boolean indicating if key is stored
+   */
+  ipcMain.handle('ai:has-api-key', async () => {
+    try {
+      console.log('IPC: Checking for API key...');
+      const hasKey = await apiKeyStorage.hasApiKey();
+      return hasKey;
+    } catch (error) {
+      console.error('Error in ai:has-api-key handler:', error);
+      throw new Error(`Failed to check for API key: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  });
+
+  /**
+   * Handle 'ai:delete-api-key' - Delete stored API key
+   * Returns: Success confirmation
+   */
+  ipcMain.handle('ai:delete-api-key', async () => {
+    try {
+      console.log('IPC: Deleted API key');
+      await apiKeyStorage.deleteApiKey();
+      return { success: true };
+    } catch (error) {
+      console.error('Error in ai:delete-api-key handler:', error);
+      throw new Error(`Failed to delete API key: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  });
+
+  /**
+   * Handle 'ai:get-profiles' - Load all AI content profiles
+   * Returns: Array of all user profiles
+   */
+  ipcMain.handle('ai:get-profiles', async () => {
+    try {
+      console.log('IPC: Loading AI profiles...');
+      const profiles = await profileStorage.getAllProfiles();
+      return profiles;
+    } catch (error) {
+      console.error('Error in ai:get-profiles handler:', error);
+      throw new Error(`Failed to get profiles: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  });
+
+  /**
+   * Handle 'ai:get-profile' - Load a single AI profile by ID
+   * @param id - Profile ID to retrieve
+   * Returns: Profile object or null if not found
+   */
+  ipcMain.handle('ai:get-profile', async (_event, id: string) => {
+    try {
+      console.log(`IPC: Loading profile ${id}`);
+      const profile = await profileStorage.getProfile(id);
+      return profile;
+    } catch (error) {
+      console.error('Error in ai:get-profile handler:', error);
+      throw new Error(`Failed to get profile: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  });
+
+  /**
+   * Handle 'ai:save-profile' - Create a new AI content profile
+   * @param data - Partial profile (name, targetAudience, contentGuidelines)
+   * Returns: Complete profile with generated ID and timestamps
+   */
+  ipcMain.handle('ai:save-profile', async (_event, data: Omit<UserProfile, 'id' | 'createdAt' | 'updatedAt'>) => {
+    try {
+      console.log(`IPC: Saving new profile: ${data.name}`);
+      const profile = await profileStorage.saveProfile(data);
+      return profile;
+    } catch (error) {
+      console.error('Error in ai:save-profile handler:', error);
+      throw new Error(`Failed to save profile: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  });
+
+  /**
+   * Handle 'ai:update-profile' - Update an existing AI profile
+   * @param id - Profile ID to update
+   * @param updates - Partial profile data to update
+   * Returns: Updated profile object
+   */
+  ipcMain.handle('ai:update-profile', async (_event, id: string, updates: Partial<Omit<UserProfile, 'id'>>) => {
+    try {
+      console.log(`IPC: Updating profile ${id}`);
+      const profile = await profileStorage.updateProfile(id, updates);
+      return profile;
+    } catch (error) {
+      console.error('Error in ai:update-profile handler:', error);
+      throw new Error(`Failed to update profile: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  });
+
+  /**
+   * Handle 'ai:delete-profile' - Delete an AI profile
+   * @param id - Profile ID to delete
+   * Returns: Success confirmation
+   */
+  ipcMain.handle('ai:delete-profile', async (_event, id: string) => {
+    try {
+      console.log(`IPC: Deleted profile ${id}`);
+      await profileStorage.deleteProfile(id);
+      return { success: true };
+    } catch (error) {
+      console.error('Error in ai:delete-profile handler:', error);
+      throw new Error(`Failed to delete profile: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  });
+
+  /**
+   * TEMPORARY TEST HANDLER - Handle 'test:extract-audio' - Test audio extraction
+   * @param videoPath - Path to video file to extract audio from
+   * Returns: Object with audioPath, duration, and file size
+   */
+  ipcMain.handle('test:extract-audio', async (_event, videoPath: string) => {
+    try {
+      console.log('IPC: Testing audio extraction for:', videoPath);
+
+      // Extract audio
+      const audioPath = await audioExtractor.extractAudio(videoPath);
+      console.log('IPC: Audio extracted to:', audioPath);
+
+      // Get audio duration
+      const duration = await audioExtractor.getAudioDuration(audioPath);
+      console.log('IPC: Audio duration:', duration, 'seconds');
+
+      // Get file size
+      const stats = fs.statSync(audioPath);
+      const sizeInMB = (stats.size / (1024 * 1024)).toFixed(2);
+      console.log('IPC: Audio file size:', sizeInMB, 'MB');
+
+      // Test cleanup
+      audioExtractor.deleteTemporaryFile(audioPath);
+      console.log('IPC: Audio file cleaned up');
+
+      return {
+        audioPath,
+        duration,
+        sizeInMB: parseFloat(sizeInMB),
+        success: true
+      };
+    } catch (error) {
+      console.error('Error in test:extract-audio handler:', error);
+      throw new Error(`Failed to extract audio: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  });
+
+  /**
+   * Handle 'ai:transcribe-video' - Transcribe video to text with timestamps
+   * @param params - Object containing:
+   *   - videoPath: Path to video file to transcribe
+   *   - startTime: Optional clip start time (for trimmed clips, in seconds)
+   *   - endTime: Optional clip end time (for trimmed clips, in seconds)
+   * Returns: Transcript object with fullText, segments, duration, and language
+   */
+  ipcMain.handle('ai:transcribe-video', async (_event, params: {
+    videoPath: string;
+    startTime?: number;
+    endTime?: number;
+  }) => {
+    try {
+      const { videoPath, startTime, endTime } = params;
+
+      // Validate required parameter
+      if (!videoPath) {
+        throw new Error('videoPath is required');
+      }
+
+      console.log(`IPC: Starting video transcription for ${videoPath}`);
+      if (startTime !== undefined || endTime !== undefined) {
+        console.log(`IPC: Trimmed clip: ${startTime}s - ${endTime}s`);
+      }
+
+      // Call VideoAnalysisService to run full pipeline
+      const transcript: Transcript = await videoAnalysisService.transcribeVideo(
+        videoPath,
+        startTime,
+        endTime
+      );
+
+      console.log(`IPC: Transcription complete - ${transcript.segments.length} segments, ${transcript.fullText.length} chars`);
+      console.log(`IPC: Language detected: ${transcript.language || 'unknown'}`);
+
+      return transcript;
+    } catch (error) {
+      console.error('Error in ai:transcribe-video handler:', error);
+
+      // Provide descriptive error messages based on error type
+      if (error instanceof Error) {
+        // Check for specific error types
+        if (error.message.includes('API key')) {
+          throw new Error('No API key configured. Please set your OpenAI API key in Settings.');
+        }
+        if (error.message.includes('not found') || error.message.includes('does not exist')) {
+          throw new Error('Video file not found. Please check the file path.');
+        }
+        if (error.message.includes('too large')) {
+          throw new Error('Audio file too large (max 25MB). Try a shorter video clip.');
+        }
+        if (error.message.includes('network') || error.message.includes('ENOTFOUND') || error.message.includes('ETIMEDOUT')) {
+          throw new Error('Network error - check your internet connection and try again.');
+        }
+        if (error.message.includes('Invalid API key') || error.message.includes('Incorrect API key')) {
+          throw new Error('Invalid API key. Please check your OpenAI API key in Settings.');
+        }
+        if (error.message.includes('No audio track')) {
+          throw new Error('Video has no audio track. Cannot transcribe.');
+        }
+
+        // Pass through the original error message if it's already descriptive
+        throw error;
+      }
+
+      throw new Error('Failed to transcribe video: Unknown error');
+    }
+  });
+
+  /**
+   * Handle 'ai:analyze-clip' - Full video analysis pipeline (transcribe + GPT-4 analysis)
+   * @param params - Object containing:
+   *   - videoPath: Path to video file to analyze
+   *   - profile: UserProfile object with targetAudience and contentGuidelines
+   *   - startTime: Optional clip start time (for trimmed clips, in seconds)
+   *   - endTime: Optional clip end time (for trimmed clips, in seconds)
+   * Returns: AnalysisResult with GPT-4 analysis, transcript, and metadata
+   */
+  ipcMain.handle('ai:analyze-clip', async (_event, params: {
+    videoPath: string;
+    profile: UserProfile;
+    startTime?: number;
+    endTime?: number;
+  }) => {
+    try {
+      const { videoPath, profile, startTime, endTime } = params;
+
+      // Validate required parameters
+      if (!videoPath) {
+        throw new Error('videoPath is required');
+      }
+      if (!profile) {
+        throw new Error('profile is required');
+      }
+
+      console.log(`IPC: Starting full video analysis for ${videoPath}`);
+      console.log(`IPC: Using profile: ${profile.name} (${profile.targetAudience})`);
+      if (startTime !== undefined || endTime !== undefined) {
+        console.log(`IPC: Trimmed clip: ${startTime}s - ${endTime}s`);
+      }
+
+      // Send progress update: Extracting audio
+      if (mainWindow) {
+        mainWindow.webContents.send('ai:analysis-progress', {
+          stage: 'extracting',
+          message: 'Extracting audio...'
+        });
+      }
+
+      // Note: The actual audio extraction happens inside videoAnalysisService.analyzeVideoContent
+      // We could send a "transcribing" progress update, but it would require modifying the service
+      // For now, we'll send progress at the two major stages: before transcription and before GPT-4
+
+      // Send progress update: Analyzing with GPT-4
+      // This is sent before calling the service to show progress immediately
+      if (mainWindow) {
+        mainWindow.webContents.send('ai:analysis-progress', {
+          stage: 'transcribing',
+          message: 'Transcribing audio...'
+        });
+      }
+
+      // Note: We'll send another progress update after transcription completes
+      // This requires wrapping the call or modifying the service to emit events
+      // For simplicity, we'll manually track progress by timing
+
+      const startTime_analysis = Date.now();
+
+      // Call VideoAnalysisService to run full pipeline
+      const result = await videoAnalysisService.analyzeVideoContent(
+        videoPath,
+        profile,
+        startTime,
+        endTime
+      );
+
+      // Check if we should send analyzing progress (if transcription took time)
+      const elapsedTime = Date.now() - startTime_analysis;
+      if (elapsedTime > 5000 && mainWindow) {
+        // If more than 5 seconds elapsed, send analyzing progress
+        mainWindow.webContents.send('ai:analysis-progress', {
+          stage: 'analyzing',
+          message: 'Analyzing content with AI...'
+        });
+      }
+
+      console.log(`IPC: Analysis complete - ${result.analysis.length} chars`);
+      console.log(`IPC: Transcript: ${result.transcript.segments.length} segments`);
+      console.log(`IPC: Token usage: ${result.tokenUsage?.totalTokens || 'unknown'} tokens`);
+
+      return result;
+    } catch (error) {
+      console.error('Error in ai:analyze-clip handler:', error);
+
+      // Provide descriptive error messages based on error type
+      if (error instanceof Error) {
+        // Check for specific error types
+        if (error.message.includes('API key not configured')) {
+          throw new Error('OpenAI API key not configured. Please set your API key in Settings.');
+        }
+        if (error.message.includes('Invalid OpenAI API key')) {
+          throw new Error('Invalid OpenAI API key. Please check your API key in Settings.');
+        }
+        if (error.message.includes('rate limit')) {
+          throw new Error('OpenAI API rate limit exceeded. Please try again in a moment.');
+        }
+        if (error.message.includes('Video file not found')) {
+          throw new Error('Video file not found. Please check the file path.');
+        }
+        if (error.message.includes('too large')) {
+          throw new Error('Audio file too large (max 25MB). Try a shorter video clip.');
+        }
+        if (error.message.includes('network') || error.message.includes('ENOTFOUND') || error.message.includes('ETIMEDOUT')) {
+          throw new Error('Network error. Please check your internet connection.');
+        }
+        if (error.message.includes('No audio track')) {
+          throw new Error('Video has no audio track. Cannot analyze.');
+        }
+
+        // Pass through the original error message if it's already descriptive
+        throw error;
+      }
+
+      throw new Error('Failed to analyze video: Unknown error');
     }
   });
 

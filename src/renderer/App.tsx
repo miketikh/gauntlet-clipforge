@@ -6,6 +6,7 @@ import Header from './components/Header';
 import MediaLibrary from './components/MediaLibrary';
 import Preview from './components/Preview';
 import Timeline from './components/Timeline';
+import AIAssistantPanel from './components/AIAssistantPanel';
 import { useProjectStore } from './store/projectStore';
 import * as timelineCalcs from './utils/timelineCalculations';
 import './styles/global.css';
@@ -43,6 +44,7 @@ const App: React.FC = () => {
         mediaLibrary={<MediaLibrary />}
         preview={<Preview />}
         timeline={<Timeline />}
+        aiPanel={<AIAssistantPanel isOpen={false} onToggle={() => {}} />}
       />
     </DndProvider>
   );
