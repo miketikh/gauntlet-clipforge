@@ -838,12 +838,13 @@ export class TimelinePlayer {
       return;
     }
 
-    // No clip at end time - check if there are any clips ahead (gap scenario)
-    const nextClipExists = this.findNextClipAfter(clipEndTime);
+    // No clip at end time - check if we've reached the end of the timeline
+    // Compare against project duration to account for all tracks (video + audio)
+    const projectDuration = calculateProjectDuration(this.project.tracks);
 
-    if (!nextClipExists) {
-      // No more clips ahead - end playback
-      console.log('[TimelinePlayer] No more clips, ending playback');
+    if (clipEndTime >= projectDuration) {
+      // Reached end of timeline - end playback
+      console.log('[TimelinePlayer] Reached end of timeline, ending playback');
       this.pause();
       this.callbacks.onPlaybackEnd();
       return;

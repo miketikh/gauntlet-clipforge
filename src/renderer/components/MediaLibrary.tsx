@@ -171,9 +171,7 @@ const MediaLibrary: React.FC = () => {
                 lineHeight: 1.6,
               }}
             >
-              Click Import to get started
-              <br />
-              or drag and drop media files here
+              Drag media files here or click Import
             </p>
           </div>
         ) : (
