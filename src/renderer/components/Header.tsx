@@ -4,10 +4,12 @@ import { selectFile, importVideo, generateThumbnail } from '../utils/ipc';
 import { useMediaStore } from '../store/mediaStore';
 import { useProjectStore } from '../store/projectStore';
 import RecordingModal from './RecordingModal';
+import ExportDialog from './ExportDialog';
 
 const Header: React.FC = () => {
   const [isImporting, setIsImporting] = useState(false);
   const [isRecordingModalOpen, setIsRecordingModalOpen] = useState(false);
+  const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
   const addMediaFile = useMediaStore((state) => state.addMediaFile);
   const createProject = useProjectStore((state) => state.createProject);
   const resetProject = useProjectStore((state) => state.resetProject);
@@ -209,6 +211,7 @@ const Header: React.FC = () => {
           Record
         </button>
         <button
+          onClick={() => setIsExportDialogOpen(true)}
           style={{
             padding: '10px 20px',
             background: 'linear-gradient(180deg, #3B82F6 0%, #2563EB 100%)',
@@ -242,6 +245,7 @@ const Header: React.FC = () => {
     </div>
 
     <RecordingModal isOpen={isRecordingModalOpen} onClose={() => setIsRecordingModalOpen(false)} />
+    <ExportDialog isOpen={isExportDialogOpen} onClose={() => setIsExportDialogOpen(false)} />
     </>
   );
 };

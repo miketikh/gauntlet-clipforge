@@ -8,7 +8,7 @@ if (started) {
   app.quit();
 }
 
-const createWindow = () => {
+const createWindow = (): BrowserWindow => {
   // Create the browser window with ClipForge dimensions
   const mainWindow = new BrowserWindow({
     width: 1280,
@@ -34,14 +34,16 @@ const createWindow = () => {
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
     mainWindow.webContents.openDevTools();
   }
+
+  return mainWindow;
 };
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.on('ready', () => {
-  registerIpcHandlers();
-  createWindow();
+  const mainWindow = createWindow();
+  registerIpcHandlers(mainWindow);
 });
 
 // Quit when all windows are closed, except on macOS. There, it's common

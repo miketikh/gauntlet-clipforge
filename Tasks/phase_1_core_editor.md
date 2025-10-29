@@ -1059,22 +1059,22 @@ Implement real-time video preview with play/pause controls and timeline synchron
 
 ---
 
-## Phase 1.6: Basic Export
+## Phase 1.6: Basic Export [COMPLETE]
 
 **Estimated Time:** 4-5 hours
 
 Implement export functionality to render timeline composition to MP4 file.
 
-### PR 1.6.1: Export Configuration UI & File Dialog
+### PR 1.6.1: Export Configuration UI & File Dialog [x]
 
 **Goal:** Create export dialog with resolution options and file save picker
 
 **Tasks:**
-- [ ] Read `src/renderer/components/Header.tsx` to see toolbar
-- [ ] Update `src/renderer/components/Header.tsx`:
+- [x] Read `src/renderer/components/Header.tsx` to see toolbar
+- [x] Update `src/renderer/components/Header.tsx`:
   - Add "Export" button in toolbar
   - Button click opens export dialog modal
-- [ ] Create NEW: `src/renderer/components/ExportDialog.tsx` - Export configuration modal:
+- [x] Create NEW: `src/renderer/components/ExportDialog.tsx` - Export configuration modal:
   - Resolution options (radio buttons):
     - 720p (1280x720)
     - 1080p (1920x1080)
@@ -1087,16 +1087,16 @@ Implement export functionality to render timeline composition to MP4 file.
   - "Choose Export Location" button (opens file save dialog)
   - "Start Export" button (starts export process)
   - "Cancel" button (closes dialog)
-- [ ] Add IPC handler for file save dialog:
+- [x] Add IPC handler for file save dialog:
   - Update `src/main/ipc/handlers.ts`:
     - `handle('select-save-location')` - Opens save dialog, returns selected path
     - Default filename: `ClipForge_Export_[timestamp].mp4`
     - Filter to .mp4 extension only
-- [ ] Add export state to store:
+- [x] Add export state to store:
   - Create NEW: `src/renderer/store/exportStore.ts` - Zustand export state:
     - State: `isExporting: boolean`, `exportProgress: number`, `exportError: string | null`
     - Actions: `startExport(config)`, `updateProgress(percent)`, `completeExport()`, `cancelExport()`
-- [ ] Validate export configuration:
+- [x] Validate export configuration:
   - Ensure at least one clip on timeline before allowing export
   - Validate selected save path exists
   - Alert if export would overwrite existing file
@@ -1126,34 +1126,51 @@ Implement export functionality to render timeline composition to MP4 file.
 
 ### PR 1.6.2: FFmpeg Export Engine & Progress Tracking
 
-**Goal:** Implement video export using FFmpeg with real-time progress updates
+**Goal:** Implement video export using FFmpeg with real-time progress updates, preserving timeline gaps with black video
 
 **Tasks:**
-- [ ] Read `src/main/services/VideoProcessor.ts` to see existing FFmpeg methods
-- [ ] Update `src/main/services/VideoProcessor.ts`:
+- [x] Read `src/main/services/VideoProcessor.ts` to see existing FFmpeg methods
+- [x] Update `src/main/services/VideoProcessor.ts`:
   - Add method `async exportTimeline(timeline, outputPath, config)`:
-    - Parameter `timeline`: Project data with clips and trim points
+    - Parameter `timeline`: Project data with clips, trim points, and gaps
     - Parameter `config`: Resolution, framerate, codec settings
-    - For each clip:
-      - Generate FFmpeg trim command based on clip.trimStart/trimEnd
-      - Create temporary trimmed file
-    - Use FFmpeg concat filter to stitch all trimmed clips
-    - Apply scaling if resolution differs from source
+    - **NEW APPROACH: Black Base + Overlay (preserves gaps)**
+    - Calculate total timeline duration (max end time across all tracks)
+    - Build FFmpeg filter_complex command:
+      - Generate black video base: `-f lavfi -i "color=c=black:s={width}x{height}:d={duration}:r={fps}"`
+      - Generate silent audio base: `-f lavfi -i anullsrc=channel_layout=stereo:sample_rate=44100`
+      - For each video clip on timeline:
+        - Add as input: `-i {clipPath}`
+        - Trim clip using: `[input]trim=start={trimStart}:end={trimEnd},setpts=PTS-STARTPTS[clip_v]`
+        - Overlay on black base: `[base][clip_v]overlay=enable='between(t,{startTime},{endTime})'[v1]`
+      - For each audio track (video audio + separate audio clips):
+        - Trim audio: `[input]atrim=start={trimStart}:end={trimEnd},asetpts=PTS-STARTPTS[clip_a]`
+        - Delay to position: `[clip_a]adelay={startTime * 1000}|{startTime * 1000}[clip_a_delayed]`
+        - Mix all audio: `[base_audio][a1][a2]...[aN]amix=inputs={N}:duration=longest[aout]`
+    - Apply resolution scaling if needed: `scale={width}:{height}`
     - Encode final MP4 with H.264/AAC
     - Return output file path
   - Add progress tracking:
     - Parse FFmpeg output for progress percentage
     - Send progress updates via IPC every second
     - Calculate time remaining based on encoding speed
-- [ ] Create NEW: `src/main/services/ExportService.ts` - Export orchestration:
+- [x] Create NEW: `src/main/services/ExportService.ts` - Export orchestration:
   - `async startExport(project, config, outputPath)` - Main export function:
     - Validate project has clips
-    - Create temporary directory for intermediate files
+    - Calculate timeline duration from all tracks
+    - Generate filter graph string using template
     - Call VideoProcessor.exportTimeline()
     - Handle errors (cleanup temp files, send error to renderer)
     - Send completion notification to renderer
   - `cancelExport()` - Kill FFmpeg process and cleanup
-- [ ] Add IPC handlers for export:
+  - Helper: `generateFilterGraph(project, config)` - Builds filter_complex string:
+    - Iterate through all tracks
+    - Collect all video inputs and their timeline positions
+    - Collect all audio inputs and their timeline positions
+    - Generate overlay chain for video
+    - Generate adelay + amix chain for audio
+    - Return complete filter_complex string
+- [x] Add IPC handlers for export:
   - Update `src/main/ipc/handlers.ts`:
     - `handle('start-export', { project, config, outputPath })` - Start export
     - `handle('cancel-export')` - Cancel in-progress export
@@ -1161,7 +1178,7 @@ Implement export functionality to render timeline composition to MP4 file.
     - `send('export-progress', { percent, timeRemaining })` - Progress updates
     - `send('export-complete', { outputPath })` - Export finished
     - `send('export-error', { message })` - Export failed
-- [ ] Update `src/renderer/components/ExportDialog.tsx`:
+- [x] Update `src/renderer/components/ExportDialog.tsx`:
   - Listen for export progress events
   - Update progress bar (0-100%)
   - Display time remaining (e.g., "2 minutes remaining")
@@ -1170,75 +1187,93 @@ Implement export functionality to render timeline composition to MP4 file.
   - Add cancel button (calls cancel-export handler)
 
 **What to Test:**
-1. Add multiple clips to timeline with trims
-2. Open export dialog, configure resolution to 1080p, select save location
-3. Click "Start Export" - verify export begins
-4. Verify progress bar updates in real-time
-5. Verify time remaining estimate displays
-6. Let export complete - verify success message appears
-7. Open exported file in VLC/QuickTime - verify it plays correctly
-8. Verify exported video includes all clips in correct order
-9. Verify trim points are respected (trimmed portions not in export)
-10. Try canceling export mid-process - verify FFmpeg stops and temp files cleaned
-11. Try exporting 10+ minute timeline - verify it completes without crashes
+1. **Test with gaps:** Create timeline with gaps between clips (e.g., clip at 0-10s, gap 10-20s, clip at 20-30s)
+2. Export and verify gaps show as black video in output
+3. **Test with audio track:** Add separate audio track spanning entire timeline
+4. Verify audio plays continuously while video shows clips + gaps
+5. **Test with overlapping audio:** Verify video clip audio mixes with background audio
+6. Open export dialog, configure resolution to 1080p, select save location
+7. Click "Start Export" - verify export begins
+8. Verify progress bar updates in real-time
+9. Verify time remaining estimate displays
+10. Let export complete - verify success message appears
+11. Open exported file in VLC/QuickTime - verify it plays correctly
+12. Verify exported video duration matches timeline duration (not just sum of clips)
+13. Verify trim points are respected (trimmed portions not in export)
+14. Try canceling export mid-process - verify FFmpeg stops and cleanup occurs
+15. Try exporting 10+ minute timeline - verify it completes without crashes
 
 **Files Changed:**
-- `src/main/services/VideoProcessor.ts` - Add exportTimeline method
-- NEW: `src/main/services/ExportService.ts` - Export orchestration
+- `src/main/services/VideoProcessor.ts` - Add exportTimeline method with filter_complex
+- NEW: `src/main/services/ExportService.ts` - Export orchestration and filter graph generation
 - `src/main/ipc/handlers.ts` - Add export IPC handlers
 - `src/renderer/components/ExportDialog.tsx` - Progress UI and event handling
 
 **Notes:**
-- Use FFmpeg concat demuxer for stitching clips (more reliable than filter)
-- Create temp files in system temp directory (OS will clean up eventually)
+- **Critical:** Use black base + overlay approach, NOT simple concat (preserves gaps)
+- Filter graph example for reference:
+  ```bash
+  ffmpeg -f lavfi -i color=c=black:s=1920x1080:d=60:r=30 \
+         -f lavfi -i anullsrc -i clip1.mp4 -i clip2.mp4 -i audio.mp3 \
+         -filter_complex "
+           [2:v]trim=0:10,setpts=PTS-STARTPTS[c1v];
+           [3:v]trim=5:15,setpts=PTS-STARTPTS[c2v];
+           [0:v][c1v]overlay=enable='between(t,10,20)'[v1];
+           [v1][c2v]overlay=enable='between(t,30,40)'[vout];
+           [2:a]atrim=0:10,asetpts=PTS-STARTPTS,adelay=10000|10000[a1];
+           [3:a]atrim=5:15,asetpts=PTS-STARTPTS,adelay=30000|30000[a2];
+           [4:a][a1][a2]amix=3:duration=longest[aout]
+         " -map [vout] -map [aout] output.mp4
+  ```
+- adelay values are in milliseconds (startTime * 1000)
 - Progress calculation: Parse FFmpeg "time=" output and compare to total duration
 - Cancel should kill FFmpeg child process and delete incomplete output file
-- Test with various clip combinations (different resolutions, different codecs)
-- Export should handle single clip, multiple clips, clips with gaps
+- Test with various clip combinations (different resolutions, different codecs, gaps)
+- Export must handle: single clip, multiple clips, clips with gaps, separate audio tracks
 
 ---
 
-### PR 1.6.3: Export Validation & Error Handling
+### PR 1.6.3: Export Validation & Error Handling [x]
 
 **Goal:** Add robust error handling and post-export validation
 
 **Tasks:**
-- [ ] Read `src/main/services/ExportService.ts` to see export logic
-- [ ] Update `src/main/services/ExportService.ts`:
-  - Pre-export validation:
-    - Check all media files still exist at their paths
-    - Verify sufficient disk space for export (estimate based on duration/bitrate)
-    - Validate output path is writable
-    - Check FFmpeg is available and functioning
-  - Add detailed error handling:
-    - Catch FFmpeg errors (parse stderr output)
-    - Handle missing source files gracefully
-    - Handle disk full errors
-    - Handle permission errors on output path
-    - Return specific error messages for each failure type
-  - Post-export validation:
-    - Verify output file exists and has size > 0
-    - Use FFprobe to verify output file is valid video
-    - Check duration matches expected (within 1 second tolerance)
-    - If validation fails, delete invalid output and report error
-- [ ] Update `src/renderer/components/ExportDialog.tsx`:
-  - Display user-friendly error messages:
-    - "Source file not found: [filename]"
-    - "Not enough disk space. Need [X] GB free."
-    - "Export failed. Check console for details."
-  - Add "View Details" button for errors (shows full error message)
-  - Add "Open Export" button on success (opens Finder/Explorer to file)
-  - Add "Export Another" button after completion (resets dialog)
-- [ ] Add export logging:
-  - Log all export operations to console with timestamps
-  - Log FFmpeg commands being executed
-  - Log progress milestones (10%, 25%, 50%, 75%, 100%)
-  - Save export log to file for debugging (optional)
-- [ ] Create NEW: `src/renderer/utils/exportValidation.ts` - Client-side validation:
-  - `validateExportConfig(config)` - Check config is valid
-  - `validateTimeline(project)` - Check timeline is exportable
-  - `estimateExportSize(project, config)` - Calculate expected file size
-  - Return validation errors before starting export
+- [x] Read `src/main/services/ExportService.ts` to see export logic
+- [x] Update `src/main/services/ExportService.ts`:
+  - [x] Pre-export validation:
+    - [x] Check all media files still exist at their paths
+    - [x] Verify sufficient disk space for export (estimate based on duration/bitrate)
+    - [x] Validate output path is writable
+    - [x] Check FFmpeg is available and functioning
+  - [x] Add detailed error handling:
+    - [x] Catch FFmpeg errors (parse stderr output)
+    - [x] Handle missing source files gracefully
+    - [x] Handle disk full errors
+    - [x] Handle permission errors on output path
+    - [x] Return specific error messages for each failure type
+  - [x] Post-export validation:
+    - [x] Verify output file exists and has size > 0
+    - [x] Use FFprobe to verify output file is valid video
+    - [x] Check duration matches expected (within 1 second tolerance)
+    - [x] If validation fails, delete invalid output and report error
+- [x] Update `src/renderer/components/ExportDialog.tsx`:
+  - [x] Display user-friendly error messages:
+    - [x] "Source file not found: [filename]"
+    - [x] "Not enough disk space. Need [X] GB free."
+    - [x] "Export failed. Check console for details."
+  - [x] Add "View Details" button for errors (shows full error message)
+  - [x] Add "Open Export" button on success (opens Finder/Explorer to file)
+  - [x] Add "Export Another" button after completion (resets dialog)
+- [x] Add export logging:
+  - [x] Log all export operations to console with timestamps
+  - [x] Log FFmpeg commands being executed
+  - [x] Log progress milestones (10%, 25%, 50%, 75%, 100%)
+  - [x] Save export log to file for debugging (optional - console only for now)
+- [x] Create NEW: `src/renderer/utils/exportValidation.ts` - Client-side validation:
+  - [x] `validateExportConfig(config)` - Check config is valid
+  - [x] `validateTimeline(project)` - Check timeline is exportable
+  - [x] `estimateExportSize(project, config)` - Calculate expected file size
+  - [x] Return validation errors before starting export
 
 **What to Test:**
 1. Delete a media file, try to export - verify error message

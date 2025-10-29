@@ -1,19 +1,28 @@
-import { ipcMain, dialog } from 'electron';
+import { ipcMain, dialog, BrowserWindow, shell } from 'electron';
 import { VideoProcessor } from '../services/VideoProcessor';
 import { MediaFile, VideoMetadata, MediaType } from '../../types/media';
 import { recordingService } from '../services/RecordingService';
+import { ExportService } from '../services/ExportService';
+import { ExportConfig } from '../../renderer/store/exportStore';
+import { Project } from '../../types/timeline';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
 import { v4 as uuidv4 } from 'uuid';
 
 const videoProcessor = new VideoProcessor();
+let exportService: ExportService | null = null;
 
 /**
  * Register all IPC handlers for file operations
  */
-export function registerIpcHandlers() {
+export function registerIpcHandlers(mainWindow?: BrowserWindow) {
   console.log('Registering IPC handlers...');
+
+  // Initialize ExportService if mainWindow is provided
+  if (mainWindow) {
+    exportService = new ExportService(videoProcessor, mainWindow);
+  }
 
   /**
    * Handle 'select-file' - Opens native file dialog
@@ -301,6 +310,115 @@ export function registerIpcHandlers() {
     } catch (error) {
       console.error('Error in recording:save-file handler:', error);
       throw new Error(`Failed to save recording file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  });
+
+  /**
+   * Handle 'select-save-location' - Opens save file dialog for export
+   * Returns: Selected save path or null if cancelled
+   */
+  ipcMain.handle('select-save-location', async () => {
+    try {
+      // Generate default filename with timestamp
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      const defaultFilename = `ClipForge_Export_${timestamp}.mp4`;
+
+      const result = await dialog.showSaveDialog({
+        title: 'Export Video',
+        defaultPath: defaultFilename,
+        filters: [
+          {
+            name: 'MP4 Video',
+            extensions: ['mp4']
+          }
+        ],
+        properties: []
+      });
+
+      if (result.canceled || !result.filePath) {
+        return null;
+      }
+
+      return result.filePath;
+    } catch (error) {
+      console.error('Error in select-save-location handler:', error);
+      throw new Error(`Failed to open save dialog: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  });
+
+  /**
+   * Handle 'start-export' - Start video export process
+   * @param project - Project data with timeline clips
+   * @param config - Export configuration
+   * @param outputPath - Where to save the exported video
+   * @param mediaFiles - Array of all media files for clip lookup
+   */
+  ipcMain.handle('start-export', async (_event, data: {
+    project: Project;
+    config: ExportConfig;
+    outputPath: string;
+    mediaFiles: MediaFile[];
+  }) => {
+    try {
+      if (!exportService) {
+        throw new Error('ExportService not initialized');
+      }
+
+      const { project, config, outputPath, mediaFiles } = data;
+
+      console.log('[IPC] Starting export...');
+      console.log('[IPC] Output path:', outputPath);
+      console.log('[IPC] Config:', config);
+
+      await exportService.startExport(project, config, outputPath, mediaFiles);
+
+      console.log('[IPC] Export started successfully');
+      return { success: true };
+    } catch (error) {
+      console.error('Error in start-export handler:', error);
+      throw new Error(`Failed to start export: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  });
+
+  /**
+   * Handle 'cancel-export' - Cancel in-progress export
+   */
+  ipcMain.handle('cancel-export', async () => {
+    try {
+      if (!exportService) {
+        throw new Error('ExportService not initialized');
+      }
+
+      console.log('[IPC] Canceling export...');
+      exportService.cancelExport();
+
+      return { success: true };
+    } catch (error) {
+      console.error('Error in cancel-export handler:', error);
+      throw new Error(`Failed to cancel export: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  });
+
+  /**
+   * Handle 'open-export-file' - Open exported file in Finder/Explorer
+   * @param filePath - Path to the exported file
+   */
+  ipcMain.handle('open-export-file', async (_event, filePath: string) => {
+    try {
+      console.log('[IPC] Opening export file in system viewer:', filePath);
+
+      // Verify file exists
+      if (!fs.existsSync(filePath)) {
+        throw new Error('Exported file not found');
+      }
+
+      // Show file in Finder/Explorer
+      shell.showItemInFolder(filePath);
+
+      return { success: true };
+    } catch (error) {
+      console.error('Error in open-export-file handler:', error);
+      throw new Error(`Failed to open export file: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   });
 
