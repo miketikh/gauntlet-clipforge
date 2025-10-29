@@ -19,6 +19,7 @@ interface AIAssistantState {
   isAnalyzing: boolean;
   analysisStage: AnalysisStage;
   currentAnalysis: AnalysisResult | null;
+  isAnalysisExpanded: boolean;
 
   // Panel Actions
   togglePanel: () => void;
@@ -41,6 +42,7 @@ interface AIAssistantState {
   setAnalysisResult: (result: AnalysisResult) => void;
   clearAnalysis: () => void;
   analyzeClip: (videoPath: string, profileId: string, clipId: string) => Promise<void>;
+  setAnalysisExpanded: (expanded: boolean) => void;
 }
 
 export const useAIAssistantStore = create<AIAssistantState>((set, get) => ({
@@ -56,6 +58,7 @@ export const useAIAssistantStore = create<AIAssistantState>((set, get) => ({
   isAnalyzing: false,
   analysisStage: null,
   currentAnalysis: null,
+  isAnalysisExpanded: false,
 
   /**
    * Toggle the AI panel open/closed state
@@ -257,12 +260,14 @@ export const useAIAssistantStore = create<AIAssistantState>((set, get) => ({
 
   /**
    * Set the analysis result and mark analysis as complete
+   * Auto-expands the analysis results section for better readability
    */
   setAnalysisResult: (result: AnalysisResult) => {
     set({
       currentAnalysis: result,
       isAnalyzing: false,
       analysisStage: 'complete',
+      isAnalysisExpanded: true, // Auto-expand when results arrive
     });
     console.log('[AIAssistantStore] Analysis complete for clip:', result.clipId);
   },
@@ -275,8 +280,17 @@ export const useAIAssistantStore = create<AIAssistantState>((set, get) => ({
       currentAnalysis: null,
       isAnalyzing: false,
       analysisStage: null,
+      isAnalysisExpanded: false,
     });
     console.log('[AIAssistantStore] Analysis cleared');
+  },
+
+  /**
+   * Set whether the analysis results section is expanded
+   */
+  setAnalysisExpanded: (expanded: boolean) => {
+    set({ isAnalysisExpanded: expanded });
+    console.log('[AIAssistantStore] Analysis expanded:', expanded);
   },
 
   /**
@@ -344,6 +358,7 @@ export const useAIAssistantStore = create<AIAssistantState>((set, get) => ({
         currentAnalysis: analysisResult,
         isAnalyzing: false,
         analysisStage: 'complete',
+        isAnalysisExpanded: true, // Auto-expand when results arrive
       });
 
       // Clean up progress listener

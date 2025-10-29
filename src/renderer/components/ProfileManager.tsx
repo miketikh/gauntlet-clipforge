@@ -196,6 +196,7 @@ const ProfileManager: React.FC = () => {
         gap: '16px',
         width: '100%',
         paddingBottom: '20px',
+        paddingRight: '12px',
       }}
     >
       {/* Profile Selector Dropdown */}

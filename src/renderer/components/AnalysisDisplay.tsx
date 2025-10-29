@@ -15,6 +15,8 @@ const AnalysisDisplay: React.FC = () => {
   const currentAnalysis = useAIAssistantStore((state) => state.currentAnalysis);
   const clearAnalysis = useAIAssistantStore((state) => state.clearAnalysis);
   const profiles = useAIAssistantStore((state) => state.profiles);
+  const isAnalysisExpanded = useAIAssistantStore((state) => state.isAnalysisExpanded);
+  const setAnalysisExpanded = useAIAssistantStore((state) => state.setAnalysisExpanded);
 
   // Timeline and playback control stores
   const currentProject = useProjectStore((state) => state.currentProject);
@@ -198,6 +200,7 @@ const AnalysisDisplay: React.FC = () => {
         position: 'relative',
         opacity: fadeIn ? 1 : 0,
         transition: 'opacity 0.3s ease-in',
+        paddingBottom: '12px',
       }}
     >
       {/* Metadata Header - Relative Time & Profile */}
@@ -209,8 +212,41 @@ const AnalysisDisplay: React.FC = () => {
           display: 'flex',
           flexDirection: 'column',
           gap: '4px',
+          position: 'relative', // For absolute positioning of collapse button
         }}
       >
+        {/* Collapse button - only shown when expanded */}
+        {isAnalysisExpanded && (
+          <button
+            onClick={() => setAnalysisExpanded(false)}
+            title="Collapse analysis results"
+            style={{
+              position: 'absolute',
+              top: '8px',
+              right: '8px',
+              padding: '4px 8px',
+              fontSize: '0.875rem',
+              color: '#3498db',
+              backgroundColor: 'transparent',
+              border: '1px solid #3498db',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = 'rgba(52, 152, 219, 0.1)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent';
+            }}
+          >
+            <span style={{ fontSize: '0.75rem' }}>▼</span>
+            <span>Collapse</span>
+          </button>
+        )}
         <div
           style={{
             fontSize: '0.75rem',
@@ -352,7 +388,7 @@ const AnalysisDisplay: React.FC = () => {
         style={{
           display: 'flex',
           justifyContent: 'center',
-          padding: '16px 24px',
+          padding: '16px 24px 20px 24px',
           borderTop: '1px solid #334155',
         }}
       >

@@ -12,6 +12,7 @@ const AIAssistantPanel: React.FC = () => {
   const setPanelOpen = useAIAssistantStore((state) => state.setPanelOpen);
   const isAnalyzing = useAIAssistantStore((state) => state.isAnalyzing);
   const currentAnalysis = useAIAssistantStore((state) => state.currentAnalysis);
+  const isAnalysisExpanded = useAIAssistantStore((state) => state.isAnalysisExpanded);
 
   const analyzeButtonRef = useRef<HTMLDivElement>(null);
 
@@ -445,16 +446,18 @@ const AIAssistantPanel: React.FC = () => {
             <div
               ref={analyzeButtonRef}
               style={{
-                minHeight: '60px',
                 border: '1px solid #2a3c4d',
                 borderRadius: '6px',
                 background: '#2c3e50',
                 padding: '16px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px',
               }}
             >
               <h3
                 style={{
-                  margin: '0 0 12px 0',
+                  margin: '0',
                   fontSize: '0.875rem',
                   color: '#a0aec0',
                   fontWeight: 600,
@@ -471,14 +474,28 @@ const AIAssistantPanel: React.FC = () => {
             {/* Analysis Results Section */}
             <div
               style={{
-                flex: 1,
-                minHeight: '250px',
+                // Conditional positioning: absolute when expanded, flex when collapsed
+                ...(isAnalysisExpanded
+                  ? {
+                      position: 'absolute',
+                      top: '60px', // Below AI ASSISTANT header
+                      bottom: 0,
+                      left: 0,
+                      right: 0,
+                      zIndex: 10,
+                    }
+                  : {
+                      flex: 1,
+                      minHeight: '250px',
+                    }),
+                // Common styles for both states
                 border: '1px solid #2a3c4d',
                 borderRadius: '6px',
                 background: '#2c3e50',
                 display: 'flex',
                 flexDirection: 'column',
                 overflow: 'hidden',
+                transition: 'all 0.3s ease', // Smooth transition between states
               }}
             >
               <h3
