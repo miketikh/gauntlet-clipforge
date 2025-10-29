@@ -1,6 +1,7 @@
 import { ipcMain, dialog } from 'electron';
 import { VideoProcessor } from '../services/VideoProcessor';
 import { MediaFile, VideoMetadata, MediaType } from '../../types/media';
+import { recordingService } from '../services/RecordingService';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -216,6 +217,90 @@ export function registerIpcHandlers() {
     } catch (error) {
       console.error('Error in generate-thumbnail-at-time handler:', error);
       throw new Error(`Failed to generate thumbnail at time: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  });
+
+  /**
+   * Handle 'recording:get-sources' - Get available desktop sources for recording
+   * Returns: Array of DesktopSource objects with thumbnails
+   */
+  ipcMain.handle('recording:get-sources', async () => {
+    try {
+      console.log('IPC: Getting desktop sources for recording...');
+      const sources = await recordingService.getDesktopSources();
+      console.log(`IPC: Returning ${sources.length} desktop sources`);
+      return sources;
+    } catch (error) {
+      console.error('Error in recording:get-sources handler:', error);
+      throw new Error(`Failed to get desktop sources: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  });
+
+  /**
+   * Handle 'recording:start' - Start screen recording
+   * @param sourceId - Desktop source ID to record
+   * Returns: Recording info with recordingId and sourceId
+   */
+  ipcMain.handle('recording:start', async (_event, sourceId: string) => {
+    try {
+      console.log(`IPC: Starting recording for source ${sourceId}`);
+      const result = await recordingService.startScreenRecording(sourceId);
+      console.log(`IPC: Recording started with ID ${result.recordingId}`);
+      return result;
+    } catch (error) {
+      console.error('Error in recording:start handler:', error);
+      throw new Error(`Failed to start recording: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  });
+
+  /**
+   * Handle 'recording:stop' - Stop active recording
+   * Returns: Output file path
+   */
+  ipcMain.handle('recording:stop', async () => {
+    try {
+      console.log('IPC: Stopping recording...');
+      const outputPath = await recordingService.stopScreenRecording();
+      console.log(`IPC: Recording stopped, file at ${outputPath}`);
+      return outputPath;
+    } catch (error) {
+      console.error('Error in recording:stop handler:', error);
+      throw new Error(`Failed to stop recording: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  });
+
+  /**
+   * Handle 'recording:save-file' - Save recording blob to file system
+   * @param buffer - Buffer containing the recording data
+   * Returns: Path to the saved file
+   */
+  ipcMain.handle('recording:save-file', async (_event, buffer: Buffer) => {
+    try {
+      console.log(`IPC: Saving recording file (${buffer.length} bytes)`);
+
+      const activeRecording = recordingService.getActiveRecording();
+      if (!activeRecording) {
+        throw new Error('No active recording to save');
+      }
+
+      const outputPath = activeRecording.outputPath;
+
+      // Ensure directory exists
+      const dir = path.dirname(outputPath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+
+      // Write buffer to file
+      fs.writeFileSync(outputPath, buffer);
+
+      console.log(`IPC: Recording file saved to ${outputPath}`);
+      console.log(`IPC: File size: ${fs.statSync(outputPath).size} bytes`);
+
+      return outputPath;
+    } catch (error) {
+      console.error('Error in recording:save-file handler:', error);
+      throw new Error(`Failed to save recording file: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   });
 

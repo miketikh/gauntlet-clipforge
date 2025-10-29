@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
+import { RotateCcw, Upload, Circle, Download } from 'lucide-react';
 import { selectFile, importVideo, generateThumbnail } from '../utils/ipc';
 import { useMediaStore } from '../store/mediaStore';
 import { useProjectStore } from '../store/projectStore';
+import RecordingModal from './RecordingModal';
 
 const Header: React.FC = () => {
   const [isImporting, setIsImporting] = useState(false);
+  const [isRecordingModalOpen, setIsRecordingModalOpen] = useState(false);
   const addMediaFile = useMediaStore((state) => state.addMediaFile);
   const createProject = useProjectStore((state) => state.createProject);
   const resetProject = useProjectStore((state) => state.resetProject);
@@ -52,18 +55,19 @@ const Header: React.FC = () => {
   };
 
   return (
-    <div
-      style={{
-        height: '100%',
-        background: 'linear-gradient(180deg, #2c3e50 0%, #273849 100%)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '0 24px',
-        borderBottom: '1px solid #1a252f',
-        boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
-      }}
-    >
+    <>
+      <div
+        style={{
+          height: '100%',
+          background: 'linear-gradient(180deg, #2c3e50 0%, #273849 100%)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '0 24px',
+          borderBottom: '1px solid #1a252f',
+          boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+        }}
+      >
       <h1
         style={{
           margin: 0,
@@ -108,7 +112,7 @@ const Header: React.FC = () => {
             onClick={resetProject}
             style={{
               padding: '10px 18px',
-              background: 'linear-gradient(180deg, #718096 0%, #5a6472 100%)',
+              background: 'linear-gradient(180deg, #6B7280 0%, #4B5563 100%)',
               color: '#ffffff',
               border: 'none',
               borderRadius: '6px',
@@ -117,16 +121,22 @@ const Header: React.FC = () => {
               fontWeight: 500,
               boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
               transition: 'all 0.2s ease',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
             }}
             onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'linear-gradient(180deg, #9CA3AF 0%, #6B7280 100%)';
               e.currentTarget.style.transform = 'translateY(-1px)';
               e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.3)';
             }}
             onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'linear-gradient(180deg, #6B7280 0%, #4B5563 100%)';
               e.currentTarget.style.transform = 'translateY(0)';
               e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
             }}
           >
+            <RotateCcw size={16} />
             Reset Project
           </button>
         )}
@@ -135,7 +145,7 @@ const Header: React.FC = () => {
           disabled={isImporting}
           style={{
             padding: '10px 18px',
-            background: isImporting ? '#5a6472' : 'linear-gradient(180deg, #4a5568 0%, #3d4452 100%)',
+            background: isImporting ? '#4B5563' : 'linear-gradient(180deg, #6B7280 0%, #4B5563 100%)',
             color: '#ffffff',
             border: 'none',
             borderRadius: '6px',
@@ -145,70 +155,94 @@ const Header: React.FC = () => {
             boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
             transition: 'all 0.2s ease',
             opacity: isImporting ? 0.6 : 1,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
           }}
           onMouseEnter={(e) => {
             if (!isImporting) {
+              e.currentTarget.style.background = 'linear-gradient(180deg, #9CA3AF 0%, #6B7280 100%)';
               e.currentTarget.style.transform = 'translateY(-1px)';
               e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.3)';
             }
           }}
           onMouseLeave={(e) => {
+            if (!isImporting) {
+              e.currentTarget.style.background = 'linear-gradient(180deg, #6B7280 0%, #4B5563 100%)';
+            }
             e.currentTarget.style.transform = 'translateY(0)';
             e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
           }}
         >
+          <Upload size={16} />
           {isImporting ? 'Importing...' : 'Import'}
         </button>
         <button
+          onClick={() => setIsRecordingModalOpen(true)}
           style={{
             padding: '10px 18px',
-            background: 'linear-gradient(180deg, #4a5568 0%, #3d4452 100%)',
+            background: 'linear-gradient(180deg, #B91C1C 0%, #991B1B 100%)',
             color: '#ffffff',
             border: 'none',
             borderRadius: '6px',
             cursor: 'pointer',
             fontSize: '0.875rem',
             fontWeight: 500,
-            boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
+            boxShadow: '0 2px 4px rgba(185, 28, 28, 0.3)',
             transition: 'all 0.2s ease',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
           }}
           onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'linear-gradient(180deg, #DC2626 0%, #B91C1C 100%)';
             e.currentTarget.style.transform = 'translateY(-1px)';
-            e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.3)';
+            e.currentTarget.style.boxShadow = '0 4px 8px rgba(220, 38, 38, 0.4)';
           }}
           onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'linear-gradient(180deg, #B91C1C 0%, #991B1B 100%)';
             e.currentTarget.style.transform = 'translateY(0)';
-            e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.2)';
+            e.currentTarget.style.boxShadow = '0 2px 4px rgba(185, 28, 28, 0.3)';
           }}
         >
+          <Circle size={12} fill="currentColor" />
           Record
         </button>
         <button
           style={{
             padding: '10px 20px',
-            background: 'linear-gradient(180deg, #48bb78 0%, #38a169 100%)',
+            background: 'linear-gradient(180deg, #3B82F6 0%, #2563EB 100%)',
             color: '#ffffff',
             border: 'none',
             borderRadius: '6px',
             cursor: 'pointer',
             fontSize: '0.875rem',
             fontWeight: 600,
-            boxShadow: '0 2px 6px rgba(56, 161, 105, 0.4)',
+            boxShadow: '0 2px 4px rgba(59, 130, 246, 0.3)',
             transition: 'all 0.2s ease',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
           }}
           onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'linear-gradient(180deg, #60A5FA 0%, #3B82F6 100%)';
             e.currentTarget.style.transform = 'translateY(-1px)';
-            e.currentTarget.style.boxShadow = '0 4px 10px rgba(56, 161, 105, 0.5)';
+            e.currentTarget.style.boxShadow = '0 4px 8px rgba(59, 130, 246, 0.4)';
           }}
           onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'linear-gradient(180deg, #3B82F6 0%, #2563EB 100%)';
             e.currentTarget.style.transform = 'translateY(0)';
-            e.currentTarget.style.boxShadow = '0 2px 6px rgba(56, 161, 105, 0.4)';
+            e.currentTarget.style.boxShadow = '0 2px 4px rgba(59, 130, 246, 0.3)';
           }}
         >
+          <Download size={16} />
           Export
         </button>
       </div>
     </div>
+
+    <RecordingModal isOpen={isRecordingModalOpen} onClose={() => setIsRecordingModalOpen(false)} />
+    </>
   );
 };
 

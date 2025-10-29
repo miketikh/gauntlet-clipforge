@@ -42,21 +42,21 @@ This section establishes the foundation for screen recording using Electron's de
 - Read `src/types/` directory to understand existing type definitions
 
 **Tasks:**
-- [ ] Create `src/main/services/RecordingService.ts`:
+- [x] Create `src/main/services/RecordingService.ts`:
   - Add method `getDesktopSources()` to list available screens and windows
   - Use Electron's `desktopCapturer.getSources()` with types: ['screen', 'window']
   - Return array of sources with id, name, thumbnail for preview
   - Add basic error handling for permission issues
-- [ ] Add IPC handlers in main process:
+- [x] Add IPC handlers in main process:
   - `recording:get-sources` - returns available desktop sources
   - Add types for DesktopSource interface
-- [ ] Create `src/renderer/components/RecordingModal.tsx`:
+- [x] Create `src/renderer/components/RecordingModal.tsx`:
   - Modal/dialog component for source selection
   - Display grid of available sources with thumbnails
   - Show source name (e.g., "Screen 1", "Chrome - Google")
   - "Select" button for each source
   - "Cancel" button to close modal
-- [ ] Add "Record Screen" button to main toolbar:
+- [x] Add "Record Screen" button to main toolbar:
   - Opens RecordingModal when clicked
   - Position in toolbar near import button
   - Use appropriate icon (red dot or camera icon)
@@ -92,28 +92,28 @@ This section establishes the foundation for screen recording using Electron's de
 - Read `src/renderer/components/RecordingModal.tsx` to understand source selection flow
 
 **Tasks:**
-- [ ] Update `src/main/services/RecordingService.ts`:
+- [x] Update `src/main/services/RecordingService.ts`:
   - Add `startScreenRecording(sourceId: string)` method
   - Create temp directory for recordings: `app.getPath('temp')/clipforge-recordings/`
   - Return stream source info to renderer process
   - Track active recording state (recordingId, startTime, sourceId)
-- [ ] Create `src/renderer/services/MediaRecorderService.ts`:
+- [x] Create `src/renderer/services/MediaRecorderService.ts`:
   - Initialize MediaRecorder with desktop capturer stream
   - Use `navigator.mediaDevices.getUserMedia()` with chromeMediaSourceId constraint
   - Configure WebM output with video/webm codec
   - Handle dataavailable events, collect chunks in array
   - Implement stop() method that creates Blob from chunks
   - Save Blob to file system via IPC call
-- [ ] Update `src/renderer/components/RecordingModal.tsx`:
+- [x] Update `src/renderer/components/RecordingModal.tsx`:
   - After source selection, show recording controls UI
   - Display: recording timer (00:00 format), red recording indicator dot
   - "Stop Recording" button
   - Hide source selection grid during recording
   - Show "Recording screen..." status message
-- [ ] Add IPC handlers:
+- [x] Add IPC handlers:
   - `recording:save-file` - saves Blob data to temp directory, returns file path
   - `recording:stop` - cleanup and finalize recording
-- [ ] Create `src/types/recording.ts` types:
+- [x] Create `src/types/recording.ts` types:
   - RecordingState: 'idle' | 'selecting' | 'recording' | 'processing'
   - RecordingOptions: sourceId, outputPath, format
   - RecordingMetadata: duration, fileSize, resolution

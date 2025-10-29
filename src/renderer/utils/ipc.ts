@@ -1,4 +1,5 @@
 import { MediaFile } from '../../types/media';
+import { DesktopSource } from '../../types/recording';
 
 // Access ipcRenderer and webUtils from window (exposed by preload script)
 const { ipcRenderer, webUtils } = window as any;
@@ -85,5 +86,63 @@ export function getFilePathForDrop(file: File): string {
   } catch (error) {
     console.error('Error getting file path:', error);
     throw new Error(`Failed to get file path: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+/**
+ * Get available desktop sources for screen recording
+ * @returns Array of DesktopSource objects with thumbnails
+ */
+export async function getDesktopSources(): Promise<DesktopSource[]> {
+  try {
+    const sources: DesktopSource[] = await ipcRenderer.invoke('recording:get-sources');
+    return sources;
+  } catch (error) {
+    console.error('Error getting desktop sources:', error);
+    throw error;
+  }
+}
+
+/**
+ * Start screen recording for a given source
+ * @param sourceId - Desktop source ID to record
+ * @returns Recording info with recordingId and sourceId
+ */
+export async function startRecording(sourceId: string): Promise<{ recordingId: string; sourceId: string }> {
+  try {
+    const result = await ipcRenderer.invoke('recording:start', sourceId);
+    return result;
+  } catch (error) {
+    console.error('Error starting recording:', error);
+    throw error;
+  }
+}
+
+/**
+ * Stop the active recording
+ * @returns Output file path
+ */
+export async function stopRecording(): Promise<string> {
+  try {
+    const outputPath: string = await ipcRenderer.invoke('recording:stop');
+    return outputPath;
+  } catch (error) {
+    console.error('Error stopping recording:', error);
+    throw error;
+  }
+}
+
+/**
+ * Save recording blob to file system
+ * @param data - Recording data as Uint8Array (IPC will convert to Buffer in main process)
+ * @returns Path to the saved file
+ */
+export async function saveRecordingFile(data: Uint8Array): Promise<string> {
+  try {
+    const filePath: string = await ipcRenderer.invoke('recording:save-file', data);
+    return filePath;
+  } catch (error) {
+    console.error('Error saving recording file:', error);
+    throw error;
   }
 }

@@ -6,6 +6,7 @@ import TimelineTrack from './TimelineTrack';
 import Playhead from './Playhead';
 import { editAPI } from '../api';
 import { TRACK_LABEL_WIDTH, timeToPixels } from '../utils/timelineCalculations';
+import { Z_INDEX } from '../styles/zIndex';
 
 const Timeline: React.FC = () => {
   // Subscribe to project store
@@ -165,6 +166,7 @@ const Timeline: React.FC = () => {
         display: 'flex',
         flexDirection: 'column',
         outline: 'none',
+        isolation: 'isolate', // Create stacking context - z-index values inside are isolated
       }}
     >
       {/* Timeline Header with Zoom Controls */}
@@ -316,7 +318,7 @@ const Timeline: React.FC = () => {
         }}
       >
         {/* Timeline Ruler with Label Spacer */}
-        <div style={{ display: 'flex', position: 'sticky', top: 0, zIndex: 10 }}>
+        <div style={{ display: 'flex', position: 'sticky', top: 0, zIndex: Z_INDEX.RAISED }}>
           {/* Spacer to match track labels */}
           <div
             style={{
@@ -326,7 +328,7 @@ const Timeline: React.FC = () => {
               borderRight: '1px solid #2a3c4d',
               position: 'sticky',
               left: 0,
-              zIndex: 11,
+              zIndex: Z_INDEX.OVERLAY,
               boxShadow: '2px 0 4px rgba(0, 0, 0, 0.1)',
             }}
           />
@@ -371,7 +373,7 @@ const Timeline: React.FC = () => {
             width: '100%',
             height: '100%',
             pointerEvents: 'none',
-            zIndex: 1000,
+            zIndex: Z_INDEX.POPUP,
           }}
         >
           {/* Playhead Indicator */}

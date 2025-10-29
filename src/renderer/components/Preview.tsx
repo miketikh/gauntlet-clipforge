@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useCallback } from 'react';
+import { Play, Pause } from 'lucide-react';
 import { usePlayerStore } from '../store/playerStore';
 import { useProjectStore } from '../store/projectStore';
 import { TimelinePlayer } from '../services/TimelinePlayer';
@@ -275,6 +276,7 @@ const Preview: React.FC = () => {
           onClick={handlePlayPause}
           style={{
             padding: '10px 20px',
+            minWidth: '110px',
             background: isPlaying
               ? 'linear-gradient(180deg, #718096 0%, #5a6472 100%)'
               : 'linear-gradient(180deg, #48bb78 0%, #38a169 100%)',
@@ -288,6 +290,10 @@ const Preview: React.FC = () => {
               ? '0 2px 4px rgba(0, 0, 0, 0.2)'
               : '0 2px 6px rgba(56, 161, 105, 0.3)',
             transition: 'all 0.2s ease',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px',
           }}
           onMouseEnter={(e) => {
             e.currentTarget.style.transform = 'translateY(-1px)';
@@ -296,6 +302,7 @@ const Preview: React.FC = () => {
             e.currentTarget.style.transform = 'translateY(0)';
           }}
         >
+          {isPlaying ? <Pause size={16} /> : <Play size={16} fill="currentColor" />}
           {isPlaying ? 'Pause' : 'Play'}
         </button>
 
